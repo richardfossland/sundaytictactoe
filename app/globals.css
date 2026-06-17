@@ -1,0 +1,1526 @@
+/* SundayChess — design foundation.
+   "Premium tournament broadcast" within the Sunday Suite brand (gold #EBB84B ·
+   ink #14171E · paper #FAF7F0; Playfair Display + Hanken Grotesk). Atmospheric
+   dark ground with a faint chessboard texture + grain, gold as the hero accent,
+   and an orchestrated motion layer. Fonts injected by next/font in layout.tsx. */
+
+:root {
+  --gold: #ebb84b;
+  --gold-light: #f6dd97;
+  --gold-deep: #c9982f;
+  --gold-grad: linear-gradient(135deg, #f6dd97 0%, #ebb84b 45%, #d4a23a 100%);
+  --gold-sheen: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.55) 48%,
+    transparent 72%
+  );
+
+  --ink: #11141b;
+  --ink-2: #181c25;
+  --ink-3: #1e232e;
+  --ink-soft: #272d3a;
+  --ink-line: rgba(255, 255, 255, 0.08);
+  --ink-line-strong: rgba(255, 255, 255, 0.16);
+
+  --paper: #faf7f0;
+  --paper-warm: #f4eee1;
+
+  --txt: #f3efe6;
+  --txt-dim: #9aa0ad;
+  /* lifted from #6b7280 (~3.8:1, failed AA on small text) to ~5.5:1 on the dark
+     cards while staying dimmer than --txt-dim, preserving the hierarchy. */
+  --txt-faint: #868e9c;
+
+  /* chess / status accents */
+  --board-light: #ecd9b0;
+  --board-dark: #6f8f6a;
+  --turn: #5ec27a;
+  --turn-deep: #3f9e5a;
+  --warn: #e0894a;
+  --danger: #d2554d;
+
+  --display: var(--font-display), "Playfair Display", Georgia, serif;
+  --body: var(--font-body), "Hanken Grotesk", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --maxw: 1480px;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --radius: 16px;
+  --radius-sm: 11px;
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 24px 60px -28px rgba(0, 0, 0, 0.7);
+  --shadow-gold: 0 10px 40px -12px rgba(235, 184, 75, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  font-family: var(--body);
+  color: var(--txt);
+  line-height: 1.55;
+  min-height: 100dvh;
+  position: relative;
+  background:
+    radial-gradient(140% 100% at 50% -20%, #232a38 0%, #161b24 42%, var(--ink) 78%);
+  overflow-x: clip;
+}
+/* faint chessboard texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.018) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.018) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.018) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.018) 75%);
+  background-size: 150px 150px;
+  background-position: 0 0, 75px 75px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 25%, transparent 80%);
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 25%, transparent 80%);
+}
+/* fine grain */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+::selection {
+  background: var(--gold);
+  color: var(--ink);
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+img,
+svg {
+  display: block;
+}
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+}
+button {
+  font-family: inherit;
+  /* Inherit the light theme text colour so bare <button>s (e.g. card-style
+     entrances) don't fall back to the dark browser default → unreadable. */
+  color: inherit;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ============ layout primitives ============ */
+.wrap {
+  width: 100%;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.center-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 14px;
+}
+/* The live game screen: top-align so content that appears mid-game (the move
+   list on the first move, flag/draw banners) grows DOWNWARD instead of
+   re-centering everything — which read as the board "jumping" on each move. */
+.center-screen.is-game {
+  align-items: flex-start;
+}
+/* flex centering caps width-100% children to the viewport (a grid auto-track
+   would grow to the child's max-width and overflow on narrow screens). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.spread {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.muted {
+  color: var(--txt-dim);
+}
+.faint {
+  color: var(--txt-faint);
+}
+.grow {
+  flex: 1;
+}
+.text-center {
+  text-align: center;
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* ============ brand bits ============ */
+.brandmark {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.brandmark b {
+  color: var(--gold);
+  font-weight: 800;
+}
+.brandmark .knight {
+  color: var(--gold);
+  font-size: 1.05em;
+  filter: drop-shadow(0 2px 6px rgba(235, 184, 75, 0.4));
+}
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+}
+/* a thin gold hairline accent */
+.thread {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.5;
+}
+
+/* ============ card / panel ============ */
+.card {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, var(--ink-2), #14171f);
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  padding: 28px;
+  backdrop-filter: blur(6px);
+}
+/* gold top hairline on cards */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(235, 184, 75, 0.55), transparent);
+}
+.card-narrow {
+  width: 100%;
+  max-width: 450px;
+}
+
+/* landing entrance cards — gold chess glyph + playful hover lift */
+.entrance {
+  transition: transform 0.22s var(--ease), border-color 0.22s, box-shadow 0.22s;
+}
+.entrance:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  box-shadow: var(--shadow-2), var(--shadow-gold);
+}
+.entrance-glyph {
+  font-size: 54px;
+  line-height: 1;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 7px 20px rgba(235, 184, 75, 0.35));
+  transition: transform 0.3s var(--spring);
+}
+.entrance:hover .entrance-glyph {
+  transform: translateY(-3px) scale(1.08) rotate(-3deg);
+}
+
+/* ============ buttons ============ */
+.btn {
+  position: relative;
+  font: inherit;
+  font-weight: 600;
+  border: 1px solid var(--ink-line-strong);
+  background: linear-gradient(180deg, var(--ink-soft), #20262f);
+  color: var(--txt);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  min-height: 44px; /* comfortable touch target (WCAG 2.5.5) */
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    transform 0.14s var(--ease),
+    border-color 0.18s,
+    box-shadow 0.18s,
+    opacity 0.18s;
+}
+/* Keyboard focus rings (only on keyboard nav, never on mouse click). */
+.btn:focus-visible,
+button.card:focus-visible,
+a:focus-visible,
+.reaction-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 50%, transparent);
+}
+/* diagonal shine sweep on hover */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gold-sheen);
+  transform: translateX(-130%) skewX(-18deg);
+  opacity: 0;
+  transition: transform 0.6s var(--ease-out), opacity 0.2s;
+}
+.btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--ink-line-strong);
+  box-shadow: 0 12px 26px -16px rgba(0, 0, 0, 0.8);
+}
+.btn:hover::after {
+  transform: translateX(130%) skewX(-18deg);
+  opacity: 0.18;
+}
+.btn:active {
+  transform: translateY(0) scale(0.99);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.btn:disabled::after {
+  display: none;
+}
+.btn-primary {
+  background: var(--gold-grad);
+  color: #1a1305;
+  border-color: transparent;
+  font-weight: 700;
+  box-shadow: var(--shadow-gold);
+}
+.btn-primary:hover {
+  box-shadow: 0 16px 46px -14px rgba(235, 184, 75, 0.6);
+}
+.btn-primary::after {
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.7) 48%, transparent 72%);
+}
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--ink-line);
+}
+.btn-danger {
+  background: color-mix(in srgb, var(--danger) 20%, var(--ink-soft));
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.btn-lg {
+  padding: 16px 24px;
+  font-size: 17px;
+  border-radius: 13px;
+}
+.btn-block {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============ inputs ============ */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt-dim);
+}
+.input {
+  font: inherit;
+  font-size: 16px; /* ≥16px stops iOS Safari from auto-zooming on focus */
+  width: 100%;
+  min-width: 0; /* let inputs shrink below their intrinsic size on narrow screens */
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--ink-line);
+  color: var(--txt);
+  border-radius: var(--radius-sm);
+  padding: 13px 15px;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.input::placeholder {
+  color: var(--txt-faint);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--gold);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 4px rgba(235, 184, 75, 0.14);
+}
+.input-pin {
+  text-align: center;
+  font-size: 36px;
+  letter-spacing: 0.42em;
+  font-weight: 700;
+  font-family: var(--mono);
+  padding-left: 0.42em;
+}
+
+/* ============ badges / banners ============ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--ink-line);
+  letter-spacing: 0.02em;
+}
+.badge-live {
+  color: var(--turn);
+  border-color: color-mix(in srgb, var(--turn) 40%, transparent);
+  background: color-mix(in srgb, var(--turn) 12%, transparent);
+}
+.badge-live::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--turn);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--turn) 70%, transparent);
+  animation: ping 1.8s var(--ease-out) infinite;
+}
+.badge-done {
+  color: var(--txt-dim);
+}
+.banner {
+  border-radius: 13px;
+  padding: 15px 18px;
+  font-weight: 700;
+  text-align: center;
+}
+.banner-turn {
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--turn) 22%, var(--ink-2)), color-mix(in srgb, var(--turn) 8%, var(--ink-2)));
+  border: 1px solid color-mix(in srgb, var(--turn) 45%, transparent);
+  color: #d4f3da;
+  position: relative;
+  overflow: hidden;
+}
+.banner-turn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.16) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: sweep 2.6s var(--ease-out) infinite;
+}
+.banner-wait {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ink-line);
+  color: var(--txt-dim);
+}
+.banner-error {
+  background: color-mix(in srgb, var(--danger) 18%, var(--ink-2));
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  color: #f3c9c5;
+}
+
+/* ============ PIN hero (projector) ============ */
+.pin-hero {
+  font-family: var(--mono);
+  font-size: clamp(58px, 13vw, 150px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  padding-left: 0.14em;
+  background: linear-gradient(180deg, #fbe9b8 0%, var(--gold) 55%, var(--gold-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  position: relative;
+  filter: drop-shadow(0 10px 40px rgba(235, 184, 75, 0.28));
+}
+.pin-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gold-sheen);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  mix-blend-mode: overlay;
+  transform: translateX(-60%);
+  animation: pinSheen 4.5s var(--ease-out) infinite;
+}
+
+/* ============ tables ============ */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--ink-line);
+}
+.table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--txt-faint);
+  font-weight: 700;
+}
+.table td.num,
+.table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table tbody tr {
+  transition: background 0.18s;
+}
+.table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+.table tr.me td {
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+.rankpill {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--txt-dim);
+}
+.rankpill.r1 {
+  background: var(--gold-grad);
+  color: #1a1305;
+}
+.rankpill.r2 {
+  background: linear-gradient(135deg, #e8e8ee, #b9bcc6);
+  color: #1a1305;
+}
+.rankpill.r3 {
+  background: linear-gradient(135deg, #e0a978, #b87333);
+  color: #1a1305;
+}
+
+/* ============ player chips ============ */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: linear-gradient(180deg, var(--ink-soft), #1c212b);
+  border: 1px solid var(--ink-line);
+  border-radius: 999px;
+  padding: 8px 15px 8px 9px;
+  font-weight: 600;
+  animation: chipPop 0.42s var(--spring) both;
+}
+.chip .avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #1a1305;
+  background: var(--gold-grad);
+}
+.chip-kick {
+  margin-left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--txt-faint);
+  background: transparent;
+  border: 1px solid var(--ink-line);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.chip-kick:hover {
+  color: #fff;
+  background: var(--danger, #d4524e);
+  border-color: var(--danger, #d4524e);
+}
+
+/* generic round avatar */
+.avatar-lg {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #1a1305;
+  background: var(--gold-grad);
+  box-shadow: var(--shadow-1);
+}
+
+/* ============ player identity card (who is white / black) ============ */
+.player-card {
+  position: relative;
+  overflow: hidden;
+}
+/* a tinted left accent stripe in the player's piece colour */
+.player-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.player-card-white::before {
+  background: linear-gradient(180deg, #fdfaf2, #d8cfb8);
+}
+.player-card-black::before {
+  background: linear-gradient(180deg, #2b303b, #0c0e13);
+}
+.player-card-white {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #fdfaf2 8%, var(--ink-soft)),
+    #1a1f29
+  );
+}
+.player-card-black {
+  background: linear-gradient(180deg, #161a22, #0c0e13);
+}
+
+/* the colour chip: a piece glyph on a white / black swatch */
+.color-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 5px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.color-chip-glyph {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 14px;
+}
+.color-chip-white {
+  background: rgba(253, 250, 242, 0.1);
+  color: #fdfaf2;
+  border: 1px solid rgba(253, 250, 242, 0.22);
+}
+.color-chip-white .color-chip-glyph {
+  background: #fdfaf2;
+  color: #11141b;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.color-chip-black {
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--txt);
+  border: 1px solid var(--ink-line-strong);
+}
+.color-chip-black .color-chip-glyph {
+  background: #0c0e13;
+  color: #fdfaf2;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* ============ chess board frame ============ */
+.board-frame {
+  position: relative;
+  padding: 14px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #2c333f, #171b23);
+  border: 1px solid var(--ink-line-strong);
+  box-shadow:
+    var(--shadow-2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.board-frame::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(235, 184, 75, 0.25);
+  pointer-events: none;
+}
+/* player board — a comfortably large centre on every screen */
+.board-shell {
+  width: min(94vw, 78vh, 760px);
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* responsive game layout: board centre, player info stacked (narrow) or on the
+   sides (wide), so no screen wastes space */
+.game-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+.game-grid .game-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+.game-side {
+  width: 100%;
+  max-width: min(94vw, 600px);
+}
+@media (min-width: 1000px) {
+  .game-grid {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+    align-items: center;
+    gap: 30px;
+    max-width: 1640px;
+  }
+  .game-grid .panel-opp {
+    justify-self: end;
+  }
+  .game-grid .panel-me {
+    justify-self: start;
+  }
+  .game-grid .game-side {
+    max-width: 330px;
+  }
+  .game-grid .game-center {
+    width: auto;
+  }
+  /* with side panels and space around, let the board fill the room.
+     48vw keeps clear of the two panels; 80vh leaves room for the turn
+     banner above and the action buttons below. */
+  .game-grid .board-shell {
+    width: min(48vw, 80vh, 900px);
+  }
+}
+/* very wide screens (projector / large monitor): go bigger still */
+@media (min-width: 1500px) {
+  .game-grid .board-shell {
+    width: min(46vw, 82vh, 1040px);
+  }
+}
+/* spectator/projector board — much larger on a big screen */
+.board-shell-lg {
+  width: min(82vw, 80vh, 820px);
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.board-shell-sm {
+  width: min(90vw, 360px);
+  aspect-ratio: 1;
+}
+
+/* ============ board grids (responsive) ============ */
+.board-grid {
+  display: grid;
+  gap: 28px;
+  align-items: start;
+}
+.board-grid.split-lobby {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+.board-grid.split-league {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+@media (max-width: 860px) {
+  .board-grid.split-lobby,
+  .board-grid.split-league {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============ playoff bracket ============ */
+.bracket {
+  display: flex;
+  gap: 36px;
+  overflow-x: auto;
+  padding: 8px 4px 18px;
+  align-items: stretch;
+}
+.bracket-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 18px;
+  min-width: 230px;
+}
+.bracket-col h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--txt-faint);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.bracket-match {
+  position: relative;
+  background: linear-gradient(180deg, var(--ink-2), #15191f);
+  border: 1px solid var(--ink-line);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.bracket-match:hover {
+  border-color: var(--ink-line-strong);
+  transform: translateY(-1px);
+}
+/* Read-only bracket (players / finished recap): not interactive. */
+.bracket-readonly .bracket-match {
+  cursor: default;
+}
+.bracket-readonly .bracket-match:hover {
+  transform: none;
+  border-color: var(--ink-line);
+}
+.bracket-slot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  font-weight: 600;
+}
+.bracket-slot + .bracket-slot {
+  border-top: 1px solid var(--ink-line);
+}
+.bracket-slot .seed {
+  color: var(--txt-faint);
+  font-size: 12px;
+  width: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.bracket-slot.win {
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  color: var(--gold-light);
+}
+.bracket-slot.tbd {
+  color: var(--txt-faint);
+  font-style: italic;
+}
+
+/* ============ round timer ============ */
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.timer.low {
+  color: var(--warn);
+  animation: pulseSoft 1s ease-in-out infinite;
+}
+.timer.up {
+  color: var(--danger);
+}
+
+/* ============ podium ============ */
+.podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+.podium-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  /* responsive so three columns + gaps never overflow a ~360px phone */
+  width: clamp(88px, 28vw, 130px);
+}
+.podium-bar {
+  width: 100%;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(180deg, var(--ink-soft), #1a1f29);
+  border: 1px solid var(--ink-line);
+  border-bottom: none;
+  display: grid;
+  place-items: start center;
+  padding-top: 10px;
+  font-family: var(--display);
+  font-weight: 800;
+  color: var(--txt-dim);
+  transform-origin: bottom;
+  animation: riseBar 0.7s var(--ease-out) both;
+}
+.podium-bar.p1 {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 35%, var(--ink-soft)), #1a1f29);
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+  color: var(--gold-light);
+}
+
+/* ============ result overlay (student) ============ */
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 60;
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease both;
+}
+.result-card {
+  text-align: center;
+  animation: popIn 0.5s var(--spring) both;
+}
+.result-emoji {
+  font-size: 84px;
+  line-height: 1;
+  animation: dropIn 0.6s var(--spring) both;
+}
+
+/* ============ promotion picker ============ */
+.promo-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 80; /* above the result overlay (60) */
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s ease both;
+}
+.promo-card {
+  background: var(--ink-2);
+  border: 1px solid var(--ink-line-strong);
+  border-radius: var(--radius);
+  padding: 18px 20px 14px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: popIn 0.35s var(--spring) both;
+}
+.promo-title {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--txt-dim);
+  margin: 0 0 12px;
+}
+.promo-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.promo-btn {
+  width: 60px;
+  height: 60px;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 34px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ink-line-strong);
+  background: var(--ink-soft);
+  color: var(--txt);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), border-color 0.12s, background 0.12s;
+}
+.promo-btn:hover {
+  background: var(--ink-3);
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+.promo-btn:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 40%, transparent);
+}
+.promo-hint {
+  font-size: 12px;
+  color: var(--txt-faint);
+  margin: 12px 0 0;
+}
+.confirm-card {
+  background: var(--ink-2);
+  border: 1px solid var(--ink-line-strong);
+  border-radius: var(--radius);
+  padding: 22px 22px 18px;
+  max-width: min(92vw, 380px);
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: popIn 0.35s var(--spring) both;
+}
+.confirm-msg {
+  font-size: 16px;
+  line-height: 1.45;
+  margin: 0 0 18px;
+}
+
+/* ============ move list (SAN notation panel) ============ */
+.movelist {
+  width: 100%;
+  max-width: min(94vw, 560px);
+  max-height: 132px;
+  overflow-y: auto;
+  background: var(--ink-2);
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-variant-numeric: tabular-nums;
+  -webkit-overflow-scrolling: touch;
+}
+.movelist-empty {
+  font-size: 13px;
+}
+.movelist-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.movelist-row {
+  display: grid;
+  grid-template-columns: 2.4em 1fr 1fr;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.movelist-no {
+  color: var(--txt-faint);
+  text-align: right;
+}
+.movelist-san {
+  color: var(--txt-dim);
+}
+.movelist-current {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* ============ motion utilities ============ */
+.reveal {
+  opacity: 0;
+  animation: fadeInUp 0.6s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.reveal-fast {
+  opacity: 0;
+  animation: fadeInUp 0.45s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.scale-in {
+  animation: scaleIn 0.5s var(--ease-out) both;
+}
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ============ keyframes ============ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes chipPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes dropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.7);
+  }
+  60% {
+    transform: translateY(4px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes riseBar {
+  from {
+    transform: scaleY(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+@keyframes pulseSoft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--turn) 60%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes pinSheen {
+  0% {
+    transform: translateX(-60%);
+  }
+  45%,
+  100% {
+    transform: translateX(60%);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============ utility ============ */
+.big-code {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding-left: 0.18em;
+  background: var(--gold-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.spin {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--ink-line);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ============ sound toggle (fixed corner) ============ */
+.sound-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--ink-soft) 80%, transparent);
+  border: 1px solid var(--ink-line-strong);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.sound-toggle:hover {
+  opacity: 1;
+  transform: scale(1.06);
+}
+/* Fullscreen toggle — same pill as the sound toggle, stacked just above it. */
+.fullscreen-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 64px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--ink-soft) 80%, transparent);
+  border: 1px solid var(--ink-line-strong);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.fullscreen-toggle:hover {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+/* ============ emoji reactions ============ */
+.reaction-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: inherit;
+}
+.reaction-float {
+  position: absolute;
+  bottom: -12%;
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1;
+  animation: reaction-rise 2.5s cubic-bezier(0.2, 0.6, 0.35, 1) forwards;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+}
+@keyframes reaction-rise {
+  0% {
+    transform: translateY(0) scale(0.6) rotate(-6deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-12%) scale(1.15) rotate(4deg);
+  }
+  100% {
+    transform: translateY(-560px) scale(1) rotate(-3deg);
+    opacity: 0;
+  }
+}
+.reaction-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap; /* don't overflow a narrow phone width */
+}
+.reaction-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  background: var(--ink-soft);
+  border: 1px solid var(--ink-line);
+  cursor: pointer;
+  transition: transform 0.12s var(--ease-out), border-color 0.12s ease;
+}
+.reaction-btn:hover {
+  transform: scale(1.18) rotate(-5deg);
+  border-color: var(--ink-line-strong);
+}
+.reaction-btn:active {
+  transform: scale(0.92);
+}
+
+/* ============ engine hype callout (projector) ============ */
+.hype-callout {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  padding: 14px 30px;
+  border-radius: 16px;
+  font-size: clamp(26px, 4vw, 44px);
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  animation: hype-pop 2.6s cubic-bezier(0.2, 1.2, 0.4, 1) forwards;
+}
+.hype-good {
+  background: rgba(40, 80, 50, 0.82);
+  border: 2px solid #5ec27a;
+  color: #c9f4d4;
+  box-shadow: 0 12px 50px -10px rgba(94, 194, 122, 0.7);
+}
+.hype-bad {
+  background: rgba(96, 36, 36, 0.82);
+  border: 2px solid #e26d5a;
+  color: #ffd9cf;
+  box-shadow: 0 12px 50px -10px rgba(226, 109, 90, 0.7);
+}
+.hype-swing {
+  background: rgba(90, 70, 20, 0.85);
+  border: 2px solid var(--gold);
+  color: #ffe9b8;
+  box-shadow: 0 12px 50px -10px rgba(235, 184, 75, 0.75);
+}
+.hype-mate {
+  background: rgba(20, 22, 30, 0.9);
+  border: 2px solid var(--gold);
+  color: var(--gold);
+  box-shadow: 0 16px 60px -8px rgba(235, 184, 75, 0.85);
+}
+@keyframes hype-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4) rotate(-4deg);
+    opacity: 0;
+  }
+  10% {
+    transform: translate(-50%, -50%) scale(1.12) rotate(2deg);
+    opacity: 1;
+  }
+  16% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94) translateY(-12px);
+  }
+}
+
+/* ============ awards (podium) ============ */
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.award-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  text-align: center;
+}
+.award-emoji {
+  font-size: 34px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 16px rgba(235, 184, 75, 0.35));
+}
+
+/* ============ chess clock (lyn/blitz) ============ */
+.chess-clock {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  background: #12151b;
+  border: 1px solid var(--ink-line);
+  color: var(--txt-dim);
+  font-variant-numeric: tabular-nums;
+}
+.chess-clock.clock-running {
+  color: var(--txt);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  box-shadow: 0 0 12px -4px rgba(235, 184, 75, 0.6);
+}
+.chess-clock.clock-low {
+  color: #ffd9cf;
+  border-color: color-mix(in srgb, var(--danger) 70%, transparent);
+}
+.chess-clock.clock-running.clock-low {
+  animation: clock-pulse 1s ease-in-out infinite;
+}
+@keyframes clock-pulse {
+  0%, 100% { box-shadow: 0 0 10px -4px rgba(210, 85, 77, 0.7); }
+  50% { box-shadow: 0 0 16px -2px rgba(210, 85, 77, 0.95); }
+}
+
+/* ============ team chips / standings ============ */
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  border: 1px solid var(--ink-line-strong);
+  background: rgba(0, 0, 0, 0.25);
+}
+.team-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ============ m,n,k board (MnkBoard) ============ */
+/* grid-template-columns + aspect-ratio are set inline (depend on the variant). */
+.mnk {
+  display: grid;
+  width: 100%;
+  gap: clamp(4px, 1.4%, 12px);
+}
+.mnk-cell {
+  aspect-ratio: 1;
+  container-type: size; /* lets the glyph scale to the cell at any board size */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--ink-line-strong);
+  border-radius: clamp(6px, 8%, 14px);
+  background: linear-gradient(180deg, #232a34, #181c24);
+  color: inherit;
+  cursor: default;
+  transition: background 0.15s var(--ease-out), transform 0.08s var(--ease-out),
+    box-shadow 0.15s var(--ease-out);
+}
+.mnk-glyph {
+  font-size: 60cqmin;
+  line-height: 1;
+  font-weight: 800;
+}
+.mnk-x .mnk-glyph {
+  color: var(--gold-light);
+}
+.mnk-o .mnk-glyph {
+  color: #74c0fc;
+}
+.mnk-clickable {
+  cursor: pointer;
+}
+.mnk-clickable:hover {
+  background: linear-gradient(180deg, #2c343f, #1d222b);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.mnk-clickable:active {
+  transform: scale(0.96);
+}
+.mnk-last {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.mnk-win {
+  background: linear-gradient(180deg, #3a3320, #241f12);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 60%, transparent),
+    0 6px 24px -8px var(--gold);
+}
+.mnk-win .mnk-glyph {
+  color: var(--gold);
+}
