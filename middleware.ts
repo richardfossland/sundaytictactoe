@@ -13,7 +13,7 @@ import { sharedCookieOptions } from "@/lib/supabase/cookies";
 // the allow-list check happens server-side in requireHost() (lib/server/auth.ts).
 const PUBLIC_HOST_PREFIXES = ["/host/login", "/auth/"];
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const url =
