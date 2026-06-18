@@ -24,7 +24,7 @@ export default function Landing() {
         <hr className="thread reveal" style={r(3, { width: 120 })} />
         <p className="muted reveal" style={r(4, { maxWidth: 440, fontSize: 17 })}>
           En bondesjakk-turnering for hele gruppa. Arrangøren styrer tavla,
-          spillerne blir med med en PIN — akkurat som Kahoot, men med X og O.
+          spillerne blir med med en PIN — stort på storskjerm, med X og O.
         </p>
 
         {/* two entrances */}
