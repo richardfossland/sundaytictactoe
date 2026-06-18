@@ -17,7 +17,7 @@ const body = Hanken_Grotesk({
 export const metadata: Metadata = {
   title: "SundayTicTacToe — bondesjakk-turnering for hele gruppa",
   description:
-    "Kahoot-stil bondesjakk-turnering med liga, sluttspill og lag. Arrangøren styrer tavla, spillerne blir med med en PIN.",
+    "Bondesjakk-turnering på storskjerm med liga, sluttspill og lag. Arrangøren styrer tavla, spillerne blir med med en PIN.",
 };
 
 export default function RootLayout({

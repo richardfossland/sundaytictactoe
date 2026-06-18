@@ -11,7 +11,7 @@ function pick(alphabet: string, rng: Rng): string {
   return alphabet[Math.floor(rng() * alphabet.length)];
 }
 
-/** 6-digit Kahoot-style room PIN, e.g. "402815". Leading digits allowed. */
+/** 6-digit room PIN, e.g. "402815". Leading digits allowed. */
 export function generatePin(rng: Rng = Math.random): string {
   let pin = "";
   for (let i = 0; i < 6; i++) pin += Math.floor(rng() * 10).toString();
