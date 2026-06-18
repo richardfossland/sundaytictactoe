@@ -29,7 +29,7 @@ export default function GlobalError({ reset }: { error: Error; reset: () => void
               padding: "12px 22px",
               borderRadius: 12,
               border: "none",
-              background: "linear-gradient(135deg,#f6dd97,#ebb84b)",
+              background: "linear-gradient(135deg,#f2d58a,#ebb84b)",
               color: "#1a1305",
               fontWeight: 700,
               fontSize: 16,

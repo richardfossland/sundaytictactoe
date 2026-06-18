@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 /** Compact join hint (URL + PIN) for the teacher board — kept visible during
- * play so students can find their way back to chess.sundaysuite.app/play. */
+ * play so students can find their way back to tictactoe.sundaysuite.app/play. */
 export function JoinChip({ pin }: { pin: string }) {
   const [host, setHost] = useState("");
   useEffect(() => {

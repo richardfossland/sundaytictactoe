@@ -1,14 +1,14 @@
-/* SundayChess — design foundation.
+/* SundayTicTacToe — design foundation.
    "Premium tournament broadcast" within the Sunday Suite brand (gold #EBB84B ·
    ink #14171E · paper #FAF7F0; Playfair Display + Hanken Grotesk). Atmospheric
-   dark ground with a faint chessboard texture + grain, gold as the hero accent,
+   dark ground with a faint board texture + grain, gold as the hero accent,
    and an orchestrated motion layer. Fonts injected by next/font in layout.tsx. */
 
 :root {
   --gold: #ebb84b;
-  --gold-light: #f6dd97;
-  --gold-deep: #c9982f;
-  --gold-grad: linear-gradient(135deg, #f6dd97 0%, #ebb84b 45%, #d4a23a 100%);
+  --gold-light: #f2d58a;
+  --gold-deep: #d4a23a;
+  --gold-grad: linear-gradient(135deg, #f2d58a 0%, #ebb84b 45%, #d4a23a 100%);
   --gold-sheen: linear-gradient(
     100deg,
     transparent 20%,
@@ -32,7 +32,7 @@
      cards while staying dimmer than --txt-dim, preserving the hierarchy. */
   --txt-faint: #868e9c;
 
-  /* chess / status accents */
+  /* board / status accents */
   --board-light: #ecd9b0;
   --board-dark: #6f8f6a;
   --turn: #5ec27a;
@@ -75,7 +75,7 @@ body {
     radial-gradient(140% 100% at 50% -20%, #232a38 0%, #161b24 42%, var(--ink) 78%);
   overflow-x: clip;
 }
-/* faint chessboard texture */
+/* faint board texture */
 body::before {
   content: "";
   position: fixed;
@@ -252,7 +252,7 @@ button {
   max-width: 450px;
 }
 
-/* landing entrance cards — gold chess glyph + playful hover lift */
+/* landing entrance cards — gold glyph + playful hover lift */
 .entrance {
   transition: transform 0.22s var(--ease), border-color 0.22s, box-shadow 0.22s;
 }
@@ -690,7 +690,7 @@ a:focus-visible,
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-/* ============ chess board frame ============ */
+/* ============ game board frame ============ */
 .board-frame {
   position: relative;
   padding: 14px;
