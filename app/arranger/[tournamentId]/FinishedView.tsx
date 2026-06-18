@@ -189,7 +189,7 @@ export function FinishedView({ state }: { state: BoardState }) {
           </div>
         )}
 
-        <Link href="/host" className="btn btn-primary btn-lg" style={{ marginTop: 28 }}>
+        <Link href="/arranger" className="btn btn-primary btn-lg" style={{ marginTop: 28 }}>
           {no.host.newTournament} →
         </Link>
       </div>

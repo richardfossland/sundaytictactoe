@@ -1,4 +1,5 @@
 import { createTournament, DEFAULT_CONFIG } from "@/lib/server/store";
+import { optionalHost } from "@/lib/server/auth";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
 import { isVariant, DEFAULT_VARIANT } from "@/lib/ttt/variants";
 import type { TournamentConfig } from "@/lib/types";
@@ -41,8 +42,14 @@ export async function POST(req: Request) {
 
   const title = body?.title?.toString().slice(0, 80).trim() || null;
 
+  // OWNER WIRING (best-effort): if a Sunday Account host is signed in AND
+  // allow-listed, stamp host_user_id so the tournament shows on their dashboard.
+  // optionalHost() never throws, so an anonymous create still gets owner=null and
+  // works exactly as before — the SSO login is strictly additive.
+  const host = await optionalHost();
+
   try {
-    const t = await createTournament(title, config);
+    const t = await createTournament(title, config, host?.id ?? null);
     return ok({ id: t.id, joinPin: t.join_pin, hostCode: t.host_code });
   } catch (err) {
     console.error("[create tournament]", err);

@@ -83,7 +83,7 @@ export function Wizard({ onExit }: { onExit?: () => void }) {
     try {
       const t = await api.createTournament({ title: title.trim(), config });
       identity.saveHostCode(t.id, t.hostCode);
-      router.push(`/host/${t.id}`);
+      router.push(`/arranger/${t.id}`);
     } catch {
       setError(no.common.error);
       setBusy(false);

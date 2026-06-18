@@ -8,9 +8,17 @@ function makeClient() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    // Only used for Realtime (schema-agnostic), but set for consistency with the
-    // service client in case a direct read is ever added.
-    { db: { schema: "tictactoe" } },
+    {
+      // Only used for Realtime (schema-agnostic), but set for consistency with the
+      // service client in case a direct read is ever added.
+      db: { schema: "tictactoe" },
+      // SESSION-LESS: this is the DATA project's anon client (Realtime only). The
+      // Sunday Account host login lives on a SEPARATE issuer project
+      // (lib/supabase/auth-browser.ts). If this client persisted a session it
+      // would write its own sb-* cookie and clobber the host's auth cookie — so
+      // disable persistence entirely. Anonymous play never needs a session here.
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
   );
 }
 
