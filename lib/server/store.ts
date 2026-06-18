@@ -13,6 +13,7 @@ import type {
   Round,
   Tournament,
   TournamentConfig,
+  TournamentStatus,
 } from "@/lib/types";
 
 // Default empty board: classic 3×3 (9 dots). Larger variants pass an explicit
@@ -88,6 +89,65 @@ export async function createTournament(
     if (!isUniqueViolation(error)) break; // only PIN races are retryable
   }
   throw lastError;
+}
+
+/** Summary row for the host's "my turnerings" dashboard. */
+export interface TournamentSummary {
+  id: string;
+  title: string | null;
+  status: TournamentStatus;
+  join_pin: string;
+  created_at: string;
+  playerCount: number;
+}
+
+/** List the tournaments owned by a signed-in host (host_user_id = ownerId),
+ * newest first, with a player count per row. Returns [] for an owner who has
+ * never created anything while signed in. */
+export async function listTournamentsByOwner(
+  ownerId: string,
+): Promise<TournamentSummary[]> {
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("tournaments")
+    .select("id, title, status, join_pin, created_at")
+    .eq("host_user_id", ownerId)
+    .order("created_at", { ascending: false })
+    .limit(LIST_CAP);
+  if (error) throw error;
+  const rows = (data as Omit<TournamentSummary, "playerCount">[]) ?? [];
+  warnIfCapped("listTournamentsByOwner", rows.length);
+
+  // Player counts in one round-trip per tournament (a host's own list is small).
+  const counts = await Promise.all(
+    rows.map(async (t) => {
+      const { count } = await db
+        .from("players")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", t.id);
+      return count ?? 0;
+    }),
+  );
+  return rows.map((t, i) => ({ ...t, playerCount: counts[i] }));
+}
+
+/** Delete a tournament ONLY if it is owned by `ownerId`. Returns true when a row
+ * was deleted, false when nothing matched (wrong owner, or already gone). The
+ * owner filter is the authorization boundary; child rows (players/rounds/games)
+ * cascade via the FK `on delete cascade` in the 0001 schema. */
+export async function deleteTournamentOwned(
+  id: string,
+  ownerId: string,
+): Promise<boolean> {
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("tournaments")
+    .delete()
+    .eq("id", id)
+    .eq("host_user_id", ownerId)
+    .select("id");
+  if (error) throw error;
+  return ((data as { id: string }[]) ?? []).length > 0;
 }
 
 // A transient DB error (timeout / network / 5xx) must NOT look like "no row":

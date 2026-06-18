@@ -38,7 +38,7 @@ export default function Landing() {
             marginTop: 8,
           })}
         >
-          <Link href="/host" className="card stack entrance" style={{ padding: 26, alignItems: "center", gap: 8, textAlign: "center" }}>
+          <Link href="/arranger" className="card stack entrance" style={{ padding: 26, alignItems: "center", gap: 8, textAlign: "center" }}>
             <span className="entrance-glyph">🖥️</span>
             <b style={{ fontSize: 19 }}>{no.landing.teacher}</b>
             <span className="faint" style={{ fontSize: 13 }}>{no.landing.teacherSub}</span>
@@ -61,6 +61,16 @@ export default function Landing() {
             ✕ {no.solo.cta}
           </Link>
         </div>
+
+        {/* Discreet entry to the OPTIONAL Sunday Account host dashboard. Anonymous
+            arrangører use "Jeg arrangerer" above and never need to sign in. */}
+        <Link
+          href="/host"
+          className="faint reveal"
+          style={r(7, { fontSize: 12, textDecoration: "none", marginTop: 6 })}
+        >
+          {no.hostAuth.landingLink}
+        </Link>
       </div>
     </main>
   );

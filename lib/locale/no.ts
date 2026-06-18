@@ -27,6 +27,44 @@ export const no = {
     versus: "Spill mot hverandre",
   },
 
+  // OPTIONAL Sunday Account host login + "mine turneringer"-dashboard. Helt
+  // adskilt fra den kodebaserte arrangør-flyten (som fortsatt er anonym).
+  hostAuth: {
+    landingLink: "Arrangør med Sunday-konto →",
+    loginTitle: "Logg inn som arrangør",
+    loginLede:
+      "Valgfritt: logg inn med Sunday-kontoen din for å samle turneringene dine på ett sted. Du kan også arrangere helt anonymt fra forsiden.",
+    emailLabel: "E-post",
+    emailPlaceholder: "deg@menigheten.no",
+    sendMagicLink: "Send innloggingslenke",
+    sending: "Sender …",
+    magicLinkSent: "Sjekk innboksen din — vi har sendt en innloggingslenke til",
+    google: "Logg inn med Sunday-konto",
+    loginError: "Klarte ikke å sende lenken — sjekk adressen og prøv igjen.",
+    backToAnon: "← Arranger anonymt i stedet",
+    dashboardTitle: "Mine turneringer",
+    dashboardLede: "Turneringene du har laget mens du var innlogget.",
+    signedInAs: "Innlogget som",
+    signOut: "Logg ut",
+    createNew: "+ Ny turnering",
+    empty: "Du har ingen turneringer ennå. Lag din første!",
+    openManage: "Åpne",
+    delete: "Slett",
+    deleteConfirmTitle: "Slette turneringen?",
+    deleteConfirmBody:
+      "Dette sletter turneringen og alle spillere, runder og partier permanent. Kan ikke angres.",
+    deleteConfirm: "Slett turnering",
+    deleteCancel: "Avbryt",
+    deleteFailed: "Klarte ikke å slette. Prøv igjen.",
+    loadFailed: "Klarte ikke å hente turneringene dine.",
+    statusLobby: "Lobby",
+    statusLeague: "Liga pågår",
+    statusPlayoff: "Sluttspill",
+    statusFinished: "Ferdig",
+    untitled: "Uten tittel",
+    players: "spillere",
+  },
+
   versus: {
     title: "Spill mot hverandre",
     subtitle: "To spillere – uten en hel turnering",
