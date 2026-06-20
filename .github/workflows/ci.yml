@@ -18,3 +18,18 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  build:
+    # The OpenNext/Cloudflare build catches bundling/runtime breaks the check job
+    # does NOT — e.g. a Node-runtime middleware OpenNext rejects (exactly what hit
+    # this app's proxy.ts) — which otherwise only surface at deploy. (No Cloudflare
+    # auth: builds the Worker, it does not deploy.)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run cf:build
