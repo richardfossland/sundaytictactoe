@@ -21,7 +21,14 @@ using `@opennextjs/cloudflare` (supports `next >=16.2.6`). Config lives in
 npx opennextjs-cloudflare build
 
 # 2. Deploy the worker.
-npx opennextjs-cloudflare deploy        # = wrangler deploy under the hood
+#    ⚠️ MUST be `opennextjs-cloudflare deploy`, NOT a bare `wrangler deploy`:
+#    the prerendered-page cache lives in `.open-next/cache/` after `build` and is
+#    only copied into `.open-next/assets/cdn-cgi/_next_cache/` by the adapter's
+#    populateCache step, which `deploy` (and `upload`/`preview`) runs and
+#    `wrangler deploy` does not. Deploy without it and the static-assets
+#    incremental cache is empty → every prerendered page silently falls back to a
+#    full SSR render on every request (the exact cost this config removes).
+npx opennextjs-cloudflare deploy        # = wrangler deploy + populateCache
 
 # 3. Server-only runtime secret (NOT inlined):
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
