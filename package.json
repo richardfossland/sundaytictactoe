@@ -13,7 +13,8 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "probe": "node scripts/probe.mjs",
     "smoke:live": "node scripts/smoke-live.mjs",
-    "smoke:features": "node scripts/smoke-features.mjs"
+    "smoke:features": "node scripts/smoke-features.mjs",
+    "port:status": "bash scripts/port-status.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
