@@ -14,11 +14,13 @@ export function sansFromPgn(pgn: string): string[] {
  * Read-only — shown to players and spectators for a "follow the game" feel. Scrolls
  * the list itself only — never the page. */
 export function MoveList({ sans, title }: { sans: string[]; title?: string }) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // THROWAWAY REGRESSION — reverted in the next commit. This is the pre-fix
+  // implementation: scrollIntoView scrolls every scrollable ancestor, the
+  // document included, so the page creeps downward on every move. It exists
+  // only to prove layout-stability.spec.ts is load-bearing.
+  const endRef = useRef<HTMLLIElement | null>(null);
   useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    endRef.current?.scrollIntoView({ block: "nearest" });
   }, [sans.length]);
 
   const rows: { no: number; white?: string; black?: string }[] = [];
@@ -33,7 +35,6 @@ export function MoveList({ sans, title }: { sans: string[]; title?: string }) {
       data-testid="movelist"
       role="log"
       aria-label={title ?? "Trekkliste"}
-      ref={containerRef}
     >
       {sans.length === 0 ? (
         <span className="movelist-empty muted">–</span>
@@ -41,7 +42,11 @@ export function MoveList({ sans, title }: { sans: string[]; title?: string }) {
         <ol className="movelist-rows">
           {rows.map((r, ri) => {
             return (
-              <li key={r.no} className="movelist-row">
+              <li
+                key={r.no}
+                className="movelist-row"
+                ref={ri === rows.length - 1 ? endRef : null}
+              >
                 <span className="movelist-no">{r.no}.</span>
                 <span
                   className={`movelist-san ${ri * 2 + 1 === lastPly ? "movelist-current" : ""}`}
