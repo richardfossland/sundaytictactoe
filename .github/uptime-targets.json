@@ -8,14 +8,33 @@
       "maxFailRate": 0.1,
       "p95Ms": 2500,
       "paths": [
-        { "path": "/", "method": "GET", "expect": [200] },
-        { "path": "/", "method": "HEAD", "expect": [200] },
-        { "path": "/play", "method": "GET", "expect": [200] },
+        {
+          "path": "/",
+          "method": "GET",
+          "expect": [
+            200
+          ]
+        },
+        {
+          "path": "/",
+          "method": "HEAD",
+          "expect": [
+            200
+          ]
+        },
+        {
+          "path": "/play",
+          "method": "GET",
+          "expect": [
+            200
+          ]
+        },
         {
           "path": "/api/health?db=1",
           "method": "GET",
-          "expect": [200, 404],
-          "note": "TODO(R1 port): tighten to [200] once /api/health ships"
+          "expect": [
+            200
+          ]
         }
       ]
     }
