@@ -5,6 +5,7 @@ import type { BoardState } from "@/lib/dto";
 import { api, ApiError } from "@/lib/client/api";
 import { channels } from "@/lib/realtime";
 import { useChannel } from "@/lib/client/useChannel";
+import { useTabHidden } from "@/lib/client/useTabHidden";
 
 /** Fetch authoritative board state on mount, keep it fresh by refetching on any
  * lobby-channel event, and expose a manual refresh. Used by both the host board
@@ -58,7 +59,10 @@ export function useBoardState(tournamentId: string | null) {
     },
     (s) => {
       // Lobby broadcasts silently stopped → refetch the board immediately.
-      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") refresh();
+      // CLOSED included: channelRegistry recreates the channel itself in the
+      // background (R11), but the broadcast that channel drop may have
+      // swallowed still needs this immediate catch-up fetch.
+      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") refresh();
     },
   );
 
@@ -79,13 +83,17 @@ export function useBoardState(tournamentId: string | null) {
   }, [refresh]);
 
   // Poll backstop for missed broadcasts (round started, game resolved, etc.).
+  // Slower while the tab is hidden rather than skipped outright (R11): a
+  // backgrounded tab whose channel silently died would otherwise only heal on
+  // the immediate visibilitychange→visible refresh above, which itself relies
+  // on the tab actually being reopened — this bounds the staleness even if it
+  // never is (a projector tab left on another workspace, say).
+  const hidden = useTabHidden();
   useEffect(() => {
     if (!tournamentId) return;
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, 5000);
+    const id = setInterval(refresh, hidden ? 30000 : 5000);
     return () => clearInterval(id);
-  }, [tournamentId, refresh]);
+  }, [tournamentId, refresh, hidden]);
 
   return { state, error, errorStatus, errorCode, failures, refresh };
 }

@@ -33,9 +33,124 @@ interface Entry {
   /** True once the last consumer has released; a re-acquire before the deferred
    * teardown runs flips it back to false and reuses the channel. */
   teardown: boolean;
+  /** Needed to recreate the channel in place (see recreateEntry below). */
+  topic: string;
+  trackKey: string;
+  /** Pending `recreateEntry` timer, or null when the channel is healthy / no
+   * consumers remain to serve. */
+  recreateTimer: ReturnType<typeof setTimeout> | null;
+  /** Index into RECREATE_BACKOFF_MS for the NEXT scheduled recreate; reset to 0
+   * by a real SUBSCRIBED (the channel proved itself healthy again). */
+  backoffStep: number;
 }
 
 const entries = new Map<string, Entry>();
+
+// --- CLOSED/error recovery ---
+//
+// supabase-js forwards every subscribe status to us, including CLOSED
+// (phx_close) — but nothing upstream of this registry ever retries. Left
+// alone, a CLOSED socket (a laptop sleeping, a flaky wifi drop, the Realtime
+// server bouncing the connection) means every broadcast on that topic goes
+// silent forever, healed only by the next poll if the consumer happens to
+// have one. This recreates the channel with a capped exponential backoff
+// (1s, 2s, 5s, 10s, 30s) so broadcasts resume on their own within seconds of
+// the socket coming back, instead of only on the next visible poll.
+const RECREATE_BACKOFF_MS: readonly number[] = [1000, 2000, 5000, 10000, 30000];
+
+function cancelRecreate(entry: Entry): void {
+  if (entry.recreateTimer !== null) {
+    clearTimeout(entry.recreateTimer);
+    entry.recreateTimer = null;
+  }
+}
+
+function scheduleRecreate(entry: Entry): void {
+  // Nobody left to serve, or already scheduled — nothing to do. (Guards a
+  // late/duplicate status callback as much as a real double-schedule.)
+  if (entry.subs.size === 0 || entry.recreateTimer !== null) return;
+  const step = Math.min(entry.backoffStep, RECREATE_BACKOFF_MS.length - 1);
+  entry.backoffStep = Math.min(entry.backoffStep + 1, RECREATE_BACKOFF_MS.length - 1);
+  entry.recreateTimer = setTimeout(() => {
+    entry.recreateTimer = null;
+    recreateEntry(entry);
+  }, RECREATE_BACKOFF_MS[step]);
+}
+
+/** Destroy the dead channel and create+subscribe a fresh one on the SAME
+ * topic, re-binding every current consumer's handlers and re-issuing
+ * track() for any that carry a presence key. The Entry object itself is
+ * never replaced — only its `channel` field — so release() (which looks the
+ * entry up by topic, not by a captured reference) keeps working untouched. */
+function recreateEntry(entry: Entry): void {
+  if (entry.subs.size === 0) return; // released while the backoff was pending
+  destroyChannel(entry.channel);
+  entry.channel = createChannel(entry.topic, entry.trackKey);
+  bindChannel(entry);
+}
+
+/** Wire up broadcast/presence/status handling for `entry.channel`, fanning
+ * every event out to `entry.subs`. Shared by the initial acquire and by
+ * recreateEntry so a recreated channel behaves identically to the first one.
+ *
+ * Captures `channel` (the specific RealtimeChannel this binding is for) and
+ * checks it against the live `entry.channel` in every callback: once a
+ * channel has been superseded by recreateEntry, its own late-arriving events
+ * (e.g. the CLOSED that follows OUR OWN destroyChannel call on it) must be
+ * ignored rather than mistaken for the new channel dying too. */
+function bindChannel(entry: Entry): void {
+  const channel = entry.channel;
+
+  channel.on("broadcast", { event: "*" }, (msg) => {
+    if (entry.channel !== channel) return;
+    const event = (msg.event as string) ?? "";
+    const payload = (msg.payload as Record<string, unknown>) ?? {};
+    for (const s of entry.subs) s.onBroadcast?.(event, payload);
+  });
+
+  const syncPresence = () => {
+    if (entry.channel !== channel) return;
+    const keys = presentKeys(channel);
+    for (const s of entry.subs) s.onPresence?.(keys);
+  };
+  channel.on("presence", { event: "sync" }, syncPresence);
+  channel.on("presence", { event: "join" }, syncPresence);
+  channel.on("presence", { event: "leave" }, syncPresence);
+
+  channel.subscribe((status) => {
+    if (entry.channel !== channel) return;
+    for (const s of entry.subs) s.onStatus?.(status);
+    if (status === "SUBSCRIBED") {
+      // Proven healthy again — no reconnect pending, and the next failure
+      // starts back at the shortest backoff step.
+      cancelRecreate(entry);
+      entry.backoffStep = 0;
+      for (const s of entry.subs) if (s.trackKey) void channel.track({ online: true });
+    } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      scheduleRecreate(entry);
+    }
+  });
+}
+
+// --- Socket-level recovery nudge ---
+//
+// The heartbeat (client.ts, R4) keeps the socket alive through a hidden tab,
+// but a laptop sleep or a real network outage can still drop it, and
+// realtime-js's own reconnect backoff can take a while to notice. There's
+// only one socket for the whole tab, so ONE listener is enough for every
+// topic: the moment the tab is foregrounded or the network returns, nudge it
+// to reconnect immediately instead of waiting out whatever backoff it was
+// already mid-way through. A no-op if it's already connected.
+if (typeof window !== "undefined") {
+  const nudgeSocket = () => {
+    const rt = createClient().realtime;
+    if (!rt.isConnected()) rt.connect();
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") nudgeSocket();
+  });
+  window.addEventListener("online", nudgeSocket);
+}
 
 // --- test seam: inject a fake channel create/remove so the lifecycle can be
 // unit-tested without a live Supabase socket. ---
@@ -86,30 +201,32 @@ export function acquireChannel(
   }
 
   const trackKey = sub.trackKey ?? "";
-  const channel = createChannel(topic, trackKey);
-  const entry: Entry = { channel, subs: new Set([sub]), teardown: false };
-  entries.set(topic, entry);
-
-  channel.on("broadcast", { event: "*" }, (msg) => {
-    const event = (msg.event as string) ?? "";
-    const payload = (msg.payload as Record<string, unknown>) ?? {};
-    for (const s of entry.subs) s.onBroadcast?.(event, payload);
-  });
-
-  const syncPresence = () => {
-    const keys = presentKeys(channel);
-    for (const s of entry.subs) s.onPresence?.(keys);
+  const entry: Entry = {
+    channel: createChannel(topic, trackKey),
+    subs: new Set([sub]),
+    teardown: false,
+    topic,
+    trackKey,
+    recreateTimer: null,
+    backoffStep: 0,
   };
-  channel.on("presence", { event: "sync" }, syncPresence);
-  channel.on("presence", { event: "join" }, syncPresence);
-  channel.on("presence", { event: "leave" }, syncPresence);
+  entries.set(topic, entry);
+  bindChannel(entry);
 
-  channel.subscribe((status) => {
-    for (const s of entry.subs) s.onStatus?.(status);
-    if (status === "SUBSCRIBED" && trackKey) void channel.track({ online: true });
-  });
+  return { channel: entry.channel, release: () => releaseChannel(topic, sub) };
+}
 
-  return { channel, release: () => releaseChannel(topic, sub) };
+/** Send a broadcast on `topic`'s CURRENT shared channel, if one exists. Looked
+ * up by topic on every call (rather than a channel object cached by the
+ * caller) so a send right after recreateEntry swapped in a fresh channel
+ * still lands on the live one instead of silently hitting a destroyed one. A
+ * no-op before the first subscribe or after the last release. */
+export function sendOnTopic(
+  topic: string,
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  void entries.get(topic)?.channel.send({ type: "broadcast", event, payload });
 }
 
 function releaseChannel(topic: string, sub: ChannelSub): void {
@@ -117,9 +234,12 @@ function releaseChannel(topic: string, sub: ChannelSub): void {
   if (!entry) return;
   entry.subs.delete(sub);
   if (entry.subs.size > 0) return;
-  // Last consumer left. Defer teardown one microtask so a synchronous
-  // unmount→remount of the SAME topic reuses the channel instead of tearing it
-  // down and racing a fresh subscribe against the still-leaving one.
+  // Last consumer left — nobody to serve a reconnect for, so cancel any
+  // pending recreate rather than let it fire into an empty entry.
+  cancelRecreate(entry);
+  // Defer teardown one microtask so a synchronous unmount→remount of the SAME
+  // topic reuses the channel instead of tearing it down and racing a fresh
+  // subscribe against the still-leaving one.
   entry.teardown = true;
   queueMicrotask(() => {
     const cur = entries.get(topic);

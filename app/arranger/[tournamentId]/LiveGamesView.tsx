@@ -104,7 +104,11 @@ export function LiveGamesView({
       }
     },
     (s) => {
-      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") onStale?.();
+      // Spectate broadcasts silently stopped → refetch the board so the live
+      // grid recovers instead of freezing on stale positions. CLOSED included:
+      // channelRegistry recreates the channel itself in the background (R11),
+      // but the position/result this drop swallowed still needs this fetch.
+      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT" || s === "CLOSED") onStale?.();
     },
   );
 

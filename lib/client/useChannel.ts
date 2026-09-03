@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { acquireChannel } from "@/lib/supabase/channelRegistry";
+import { acquireChannel, sendOnTopic } from "@/lib/supabase/channelRegistry";
 
 type Handler = (event: string, payload: Record<string, unknown>) => void;
 
@@ -13,10 +12,14 @@ type Handler = (event: string, payload: Record<string, unknown>) => void;
  * `onStatus` (optional) receives the subscribe lifecycle status. Without it, a
  * silently-failed (re)join after a socket blip would stop broadcasts with no
  * signal at all; consumers use it to refetch authoritative state on
- * CHANNEL_ERROR / TIMED_OUT (the poll backstops then keep state fresh).
+ * CHANNEL_ERROR / TIMED_OUT / CLOSED (the poll backstops then keep state fresh
+ * while channelRegistry recreates the channel itself in the background, R11).
  *
  * Returns a stable `send(event, payload)` for ephemeral client broadcasts
- * (e.g. emoji reactions) on the same channel — a no-op until subscribed. */
+ * (e.g. emoji reactions) on the same channel — a no-op until subscribed. Sends
+ * are routed through the registry BY TOPIC rather than a cached channel
+ * object, so a send right after a CLOSED-triggered recreate still lands on
+ * the live channel instead of silently hitting the one that got torn down. */
 export function useChannel(
   topic: string | null,
   onEvent: Handler,
@@ -29,8 +32,6 @@ export function useChannel(
     statusRef.current = onStatus;
   });
 
-  const channelRef = useRef<RealtimeChannel | null>(null);
-
   useEffect(() => {
     if (!topic) return;
     // Guard against missing env in local/dev so the UI still renders.
@@ -38,19 +39,18 @@ export function useChannel(
 
     // Shared, ref-counted channel per topic (see channelRegistry). The handlers
     // read the refs so they always see the latest closures.
-    const { channel, release } = acquireChannel(topic, {
+    const { release } = acquireChannel(topic, {
       onBroadcast: (event, payload) => handlerRef.current(event, payload),
       onStatus: (status) => statusRef.current?.(status),
     });
-    channelRef.current = channel;
 
-    return () => {
-      channelRef.current = null;
-      release();
-    };
+    return release;
   }, [topic]);
 
-  return useCallback((event: string, payload: Record<string, unknown>) => {
-    void channelRef.current?.send({ type: "broadcast", event, payload });
-  }, []);
+  return useCallback(
+    (event: string, payload: Record<string, unknown>) => {
+      if (topic) sendOnTopic(topic, event, payload);
+    },
+    [topic],
+  );
 }
