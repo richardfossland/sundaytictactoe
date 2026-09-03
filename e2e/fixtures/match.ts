@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 
 import type { StoredPlayer } from "@/lib/client/identity";
+import { seedPlayer } from "../helpers/identity";
 
 // Getting two students onto one live board, without a browser driving the
 // teacher's lobby.
@@ -11,9 +12,6 @@ import type { StoredPlayer } from "@/lib/client/identity";
 //   * `publicFlowMatch` uses only PUBLIC routes, exactly as scripts/
 //     smoke-features.mjs does. Slower, but it is the one path that proves the
 //     seam has not drifted away from the real join flow.
-
-/** localStorage key that `lib/client/identity.ts` reads on mount. */
-const PLAYER_KEY = "ttt:player";
 
 export interface Match {
   tournamentId: string;
@@ -179,24 +177,23 @@ export async function openAs(
   context: BrowserContext,
   player: StoredPlayer,
 ): Promise<Page> {
-  await context.addInitScript(
-    ([key, value]: [string, string]) => {
-      // Init scripts also run on the context's initial `about:blank`, where
-      // localStorage is an opaque origin and every access throws SecurityError.
-      // Unguarded, that throw lands in the trace as a pageError on every single
-      // run — a red herring sitting on top of whatever really failed.
-      try {
-        window.localStorage.setItem(key, value);
-      } catch {
-        // about:blank; the same script runs again on the real document.
-      }
-    },
-    [PLAYER_KEY, JSON.stringify(player)] as [string, string],
-  );
+  await seedPlayer(context, player);
 
   const page = await context.newPage();
   await page.goto("/play");
+  await waitForBoard(page);
 
+  return page;
+}
+
+/**
+ * Wait until a LIVE board is really on screen on `page`.
+ *
+ * Split out of `openAs` because a second tab (two-tabs.spec) and a page opened
+ * behind a stubbed route (server-errors.spec) reach the same board without the
+ * fixture opening it.
+ */
+export async function waitForBoard(page: Page): Promise<void> {
   // Budget: one 8 s API timeout (lib/client/api.ts) for the resume call, plus a
   // 5 s board poll (lib/client/useBoardState.ts) to pick up the live game, plus
   // room for a cold first render of the production bundle.
@@ -214,6 +211,4 @@ export async function openAs(
     page.getByTestId("board-shell").locator("[data-cell]").first(),
     "the board never mounted inside board-shell",
   ).toBeVisible({ timeout: 20_000 });
-
-  return page;
 }

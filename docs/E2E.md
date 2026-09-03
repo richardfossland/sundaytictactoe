@@ -174,24 +174,77 @@ another Playwright project.
 
 ## Layout
 
+| file | what it holds in place |
+| ---- | ---------------------- |
+| `smoke.spec.ts` | two students, two contexts, ✕ then ◯ seen on both boards |
+| `layout-stability.spec.ts` | **L1/L2.** Eight half-moves, alternating on two devices. After every one, on both: `scrollY` unchanged, `board-shell`'s box unchanged (±0.5 px), the *watching* device's CLS delta < 0.01, and the move list still showing its newest row. |
+| `game-end.spec.ts` | **L2/L3.** ✕0 ◯3 ✕1 ◯4 ✕2 — a `result-card` on both devices with the board box, the page scroll and the reserved `.turn-slot` height all unmoved. |
+| `reconnect.spec.ts` | **R7.** The network goes away mid-game (board stays, no `join-screen`, no `load-error`, resume code intact, catches up by itself) and mid-move (a dead POST rolls back with a toast, and the `pending` lock is released well inside `PENDING_CEILING_MS`). |
+| `server-errors.spec.ts` | **R1/R3.** HTML with a status code is the edge talking, never our API. 503 on every `/api/game/*` poll keeps the board and heals within two poll cycles; a hung `/api/move` settles on the 8 s fetch deadline; 503 and 403 on `/api/resume` keep the session and offer `resume-retry`. Our own `{"error":"invalid_code"}` still ends it. |
+| `two-tabs.spec.ts` | **R5.** Newest tab is the board; the passive one makes **zero** `/api/game/` calls in 7 s; «Spill her» takes it back; a senior that goes away hands over in ~3 s via `release`, not after the 30 s TTL. |
+| `public-flow.spec.ts` | The only spec that never touches `E2E_SEAM`: create → two joins on the PIN → round start → play. |
+| `lobby-rejoin.spec.ts` | **R4.** The ghost-sweep's gate (no `POST /api/lobby/kick` for 45 s — more than one sweep tick — with the host *fully armed*) and the way back (a removed student reloads and is readmitted automatically). |
+
 ```
 e2e/
-  smoke.spec.ts        two students, two contexts, ✕ then ◯ seen on both boards
   fixtures/match.ts    createMatch (seam) · publicFlowMatch (public routes only)
                        · openAs (seed localStorage → /play → real resume path)
-  pages/board.ts       BoardPage — clickCell/markAt/marks/turnBanner/boardBox
-  helpers/cls.ts       layout-shift accumulator (installCls before goto)
+                       · waitForBoard (for tabs openAs did not open)
+  pages/board.ts       BoardPage — clickCell/markAt/marks/moves/turnBanner ·
+                       boardBox/scrollY/turnSlotHeight/movelistPinned/resignButton
+                       · watchMark (records a cell's data-mark over time)
+  helpers/cls.ts       layout-shift accumulator (installCls on a page OR context)
+  helpers/identity.ts  seedPlayer / seedHostCode / readIdentity (`ttt:player`,
+                       `ttt:host:<id>`)
+  helpers/net.ts       countRequests (assert something did NOT happen) ·
+                       blockRoute (canned reply + its undo) · hangRoute
 ```
 
 `openAs` fakes no screens: it writes `ttt:player` via `addInitScript` and lets
 `/play` walk its real path — `attemptResume` → `WaitingRoom` latches the live
 game → `GameView` mounts — then waits for `board-shell` and a cell inside it.
 
-`publicFlowMatch` exists so a spec can reach a live board **without** the seam,
-mirroring `scripts/smoke-features.mjs`. Nothing uses it yet — the smoke spec
-takes the seam — but it is the guard against the seam quietly drifting away from
-the real join flow, and the next spec that needs a lobby-shaped setup should take
-it.
+`publicFlowMatch` reaches a live board **without** the seam, mirroring
+`scripts/smoke-features.mjs`: it is the guard against the seam quietly drifting
+away from the real join flow, and `public-flow.spec.ts` is the one spec that
+takes it. **One tournament per spec run** — `/api/tournament` is rate-limited per
+IP and in CI every spec shares the runner's address.
+
+### Two conventions the specs rely on
+
+**CLS is read on the WATCHING device only.** A shift within 500 ms of your own
+tap carries `hadRecentInput`, and the Web Vitals definition excludes it. The move
+you did *not* make has no such excuse — the incoming update is what used to shove
+the board around.
+
+**A state that only exists for milliseconds is WATCHED, not sampled.** An
+optimistic move made into a dead network is rendered and rolled back before
+`fetch` even reports the failure, so `expect.poll(markAt)` on that window is a
+coin flip — it passed one CI run and failed the next, on both projects.
+`BoardPage.watchMark` installs a MutationObserver before the click and records
+the whole sequence (`["", "x", ""]`), which is a stronger claim than either
+sample. Sampling stays correct where the state STANDS: `server-errors.spec.ts`
+hangs the route, so the optimistic mark is there for the full 8 s deadline.
+
+**Both halves of L1, always.** `MoveList` keeps the newest move in view by
+setting its **own** `scrollTop`; the bug it replaced used `scrollIntoView()`,
+which scrolls every scrollable ancestor including the document. On a 3×3 board
+`.movelist` (a fixed 132 px) never actually overflows, so `movelistPinned()` is
+trivially true here and `scrollY` is the half that bites — but the pair is what
+the assertion is, because a 4×4/5×5 tournament flips which half does the work.
+
+### Two departures from SundayChess's rig, kept on purpose
+
+* **`page.route` cannot block a WebSocket.** Playwright routes HTTP; WebSocket
+  frames need `routeWebSocket`. In `lobby-rejoin` the student's phone "goes away"
+  the way it actually does — the context goes offline **and** the tab closes.
+  Either half alone can leave the Realtime connection half-open, which the server
+  only reaps on its own heartbeat timeout, well past a 60 s spec.
+* **`pagehide` is dispatched explicitly** before `page.close()` in `two-tabs`.
+  Playwright closes a Chromium target without guaranteeing the page's lifecycle
+  events are delivered first, and a spec that sometimes tests the release path
+  and sometimes tests the 30 s TTL is worse than one that says which it is
+  testing. The handler under test is still the app's own.
 
 ## The board, addressed
 
