@@ -1032,6 +1032,7 @@ a:focus-visible,
   max-width: min(94vw, 560px);
   max-height: 132px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--ink-2);
   border: 1px solid var(--ink-line);
   border-radius: var(--radius-sm);
