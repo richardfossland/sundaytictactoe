@@ -167,6 +167,37 @@ export const no = {
     endRound: "Avslutt runden",
   },
 
+  // Lærerens avlesning av klient-telemetrien (T5, port av sundaychess#87). Se
+  // docs/TELEMETRY.md.
+  diag: {
+    open: "Diagnostikk",
+    title: "Diagnostikk",
+    hint: "Hva som faktisk skjedde med elevene i denne turneringen. Ingen navn, ingen IP-adresser – bare hendelsestyper og koder. Slettes automatisk etter 14 dager.",
+    empty: "Ingen hendelser registrert. Det er et godt tegn.",
+    unavailable:
+      "Telemetri-tabellen er ikke opprettet ennå – kjør migrasjon 0012 i Supabase-dashbordet.",
+    countsTitle: "Hendelser etter type",
+    eventsTitle: "Siste hendelser",
+    time: "Tid",
+    who: "Spiller",
+    what: "Hva",
+    detail: "Detaljer",
+    unknownPlayer: "Ukjent",
+    // Hendelsestypene, i klartekst. Nøklene MÅ matche `kind` i migrasjon 0012.
+    kinds: {
+      kick: "Kastet ut av økten",
+      watchdog: "Brettet låste seg (vakthund)",
+      channel_error: "Sanntidskanalen falt ut",
+      api_timeout: "Tidsavbrudd mot serveren",
+      api_network: "Nettverksfeil",
+      api_5xx: "Serverfeil",
+      move_rollback: "Trekk rullet tilbake",
+      game_vanished: "Partiet forsvant",
+      tab_passive: "Fanen ble passiv (spiller i en annen fane)",
+      js_error: "Feil i nettleseren",
+    } as Record<string, string>,
+  },
+
   wizard: {
     step: "Steg",
     of: "av",

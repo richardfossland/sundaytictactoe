@@ -686,4 +686,61 @@ export async function currentGameForPlayer(
   return (data as Game) ?? null;
 }
 
+// ---------------- client telemetry (migration 0012, T5, port of sundaychess#87) ----------------
+//
+// This table is OPTIONAL: it only exists once the owner has run 0012 in the
+// Supabase dashboard. Every caller must therefore be able to tell "the table
+// isn't there" apart from "the database is broken" — the first is a normal,
+// expected state that degrades to a quiet 204 / "unavailable", the second is a
+// real 503. That distinction is this predicate's whole job.
+
+/** Does this PostgREST error mean "that table does not exist"?
+ *  - `42P01` is Postgres's own undefined_table.
+ *  - `PGRST205` is PostgREST's "could not find the table in the schema cache",
+ *    which is what you actually get through the REST API — including in the
+ *    window after a table is created but before the cache reloads. */
+export function isMissingTable(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const { code, message } = e as { code?: string; message?: string };
+  if (code === "42P01" || code === "PGRST205") return true;
+  return typeof message === "string" && /schema cache/i.test(message);
+}
+
+/** One row of client telemetry, as stored. */
+export interface ClientEventRow {
+  id: number;
+  at: string;
+  tournament_id: string | null;
+  player_id: string | null;
+  game_id: string | null;
+  kind: string;
+  detail: Record<string, unknown> | null;
+  sid: string | null;
+  ua_class: string | null;
+}
+
+/** The last `limit` client events for a tournament, newest first — the ONLY
+ * read of this table, and the reason for 0012's single index.
+ *
+ * Returns null (not []) when the table is missing, so the host route can say
+ * "kjør migrasjon 0012" instead of pretending a healthy empty log. A genuine DB
+ * error still throws, like every other read here. */
+export async function listClientEvents(
+  tournamentId: string,
+  limit = 200,
+): Promise<ClientEventRow[] | null> {
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("client_events")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .order("at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw error;
+  }
+  return (data ?? []) as ClientEventRow[];
+}
+
 export { START_FEN };

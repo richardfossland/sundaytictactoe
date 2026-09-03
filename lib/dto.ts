@@ -111,6 +111,34 @@ export interface GameDetail {
   drawOfferedBy?: string | null;
 }
 
+/** One client-telemetry event as the host diagnostics modal sees it (T5, port
+ * of sundaychess#87). Deliberately carries NO name — the modal joins `playerId`
+ * against the board state it already has, so the roster never travels with the
+ * log. */
+export interface DiagnosticsEvent {
+  id: number;
+  /** ISO timestamp from the database. */
+  at: string;
+  kind: string;
+  playerId: string | null;
+  gameId: string | null;
+  detail: Record<string, unknown>;
+  /** Per-page-load correlation token (random, meaningless on its own). */
+  sid: string | null;
+  /** "mobile" | "desktop" — a class, never a user-agent string. */
+  uaClass: string | null;
+}
+
+/** POST /api/tournament/[id]/diagnostics. `unavailable` means migration 0012
+ * has not been run yet: an answer, not an error. */
+export interface DiagnosticsResult {
+  events: DiagnosticsEvent[];
+  counts:
+    | { byKind: Record<string, number>; byPlayer: Record<string, number> }
+    | Record<string, never>;
+  unavailable?: boolean;
+}
+
 export function toBoardTournament(t: Tournament) {
   return {
     id: t.id,

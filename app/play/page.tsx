@@ -5,6 +5,7 @@ import Link from "next/link";
 import { no } from "@/lib/locale/no";
 import { api, ApiError, shouldClearSession } from "@/lib/client/api";
 import { identity, type StoredPlayer } from "@/lib/client/identity";
+import { errDetail, report } from "@/lib/client/telemetry";
 import { isValidPin } from "@/lib/codes";
 import { WaitingRoom } from "./WaitingRoom";
 
@@ -86,6 +87,9 @@ export default function Play() {
       })
       .catch((e) => {
         if (shouldClearSession(e)) {
+          // T5: the session is about to be wiped. Record WHY before the ids go
+          // (report() reads them from the stored identity).
+          report("kick", { reason: "resume", ...errDetail(e) });
           identity.clearPlayer();
           setError(no.player.sessionExpired);
           setScreen("join");
@@ -202,6 +206,7 @@ export default function Play() {
             className="btn btn-primary btn-lg"
             style={{ marginTop: 6 }}
             onClick={() => {
+              report("kick", { reason: "removed" });
               identity.clearPlayer();
               setMe(null);
               setError(null);
@@ -220,7 +225,11 @@ export default function Play() {
     return (
       <WaitingRoom
         me={me}
-        onLeave={() => {
+        onLeave={(reason) => {
+          // Deliberately its own reason: a student pressing "Logg ut" and a
+          // student whose tournament vanished under them are the same code path
+          // but very different numbers in the readout.
+          report("kick", { reason: reason ?? "logout" });
           identity.clearPlayer();
           setMe(null);
           setScreen("join");
