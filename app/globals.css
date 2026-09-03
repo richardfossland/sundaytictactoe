@@ -470,6 +470,24 @@ a:focus-visible,
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   color: #f3c9c5;
 }
+/* L2: the turn banner is always mounted (visibility:hidden, never unmounted,
+   once the game ends) so nothing above .board-shell can change height
+   mid-game. This slot reserves exactly ONE line of .banner: 15px padding
+   top+bottom (30) + 1px border top+bottom (2) + one line of 16px text at the
+   inherited body line-height of 1.55 (24.8px) ≈ 57px. */
+.turn-slot {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 57px;
+}
+.banner-line {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ============ PIN hero (projector) ============ */
 .pin-hero {
@@ -1030,7 +1048,10 @@ a:focus-visible,
 .movelist {
   width: 100%;
   max-width: min(94vw, 560px);
-  max-height: 132px;
+  /* Fixed, not max-height (L2): the list is always mounted (even empty, via
+     its own "–" placeholder), so it must be the same block from the very
+     first render instead of growing over the first ~6 moves. */
+  height: 132px;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--ink-2);

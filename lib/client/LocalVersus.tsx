@@ -79,31 +79,42 @@ export function LocalVersus({ onExit }: { onExit: () => void }) {
     <main className="center-screen">
       {outcome && outcome !== "draw" && <Confetti count={120} />}
       <div className="stack" style={{ alignItems: "center", width: "100%", maxWidth: 600, gap: 16 }}>
-        {/* variant picker (only before the first move) */}
-        {filled === 0 && !outcome && (
-          <div className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-            {VARIANTS.map((v) => (
-              <button
-                key={v.id}
-                className={`btn ${v.id === variant.id ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => newGame(v)}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Variant picker — always mounted (L2), never unmounted after the
+            first move: unmounting it here would change the height of
+            everything above .board-shell mid-game. Buttons go disabled once
+            play has started (and re-enable once `newGame` resets `filled` to
+            0), so the row stays but stops being interactive instead of
+            disappearing. */}
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+          {VARIANTS.map((v) => (
+            <button
+              key={v.id}
+              className={`btn ${v.id === variant.id ? "btn-primary" : "btn-ghost"}`}
+              disabled={filled > 0 && !outcome}
+              onClick={() => newGame(v)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
 
-        {!outcome && (
+        {/* Turn banner — always mounted (L2), visibility:hidden once the game
+            ends instead of unmounted, so it doesn't vanish out from under the
+            board while .result-overlay (translucent, fades in over 0.3s)
+            reveals whatever is happening underneath it. Reuses the same
+            .turn-slot reserved-height slot as the multiplayer GameView. */}
+        <div className="turn-slot" style={outcome ? { visibility: "hidden" } : undefined}>
           <div
             className="banner banner-turn"
             style={{ width: "min(92vw,560px)" }}
             role="status"
             aria-live="polite"
           >
-            {turn === "w" ? `✕ ${no.versus.whiteTurn}` : `◯ ${no.versus.blackTurn}`}
+            <span className="banner-line">
+              {turn === "w" ? `✕ ${no.versus.whiteTurn}` : `◯ ${no.versus.blackTurn}`}
+            </span>
           </div>
-        )}
+        </div>
 
         <div className="board-frame">
           <div className="board-shell">

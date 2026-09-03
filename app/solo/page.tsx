@@ -218,16 +218,23 @@ export default function Solo() {
           </div>
         </div>
 
-        {!outcome && (
+        {/* Turn banner — always mounted (L2, same pattern as GameView and
+            LocalVersus), visibility:hidden once the game ends instead of
+            unmounted, so it doesn't vanish out from under the board while
+            .result-overlay (translucent, fades in over 0.3s) reveals
+            whatever is happening underneath it. */}
+        <div className="turn-slot" style={outcome ? { visibility: "hidden" } : undefined}>
           <div
             className={`banner ${isMyTurn ? "banner-turn" : "banner-wait"}`}
             style={{ width: "min(92vw,560px)" }}
             role="status"
             aria-live="polite"
           >
-            {thinking ? no.solo.thinking : isMyTurn ? `✕ ${no.solo.yourTurn}` : no.solo.waiting}
+            <span className="banner-line">
+              {thinking ? no.solo.thinking : isMyTurn ? `✕ ${no.solo.yourTurn}` : no.solo.waiting}
+            </span>
           </div>
-        )}
+        </div>
 
         <div className="board-frame">
           <div className="board-shell">
