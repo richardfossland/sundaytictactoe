@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { BoardState } from "@/lib/dto";
-import { api } from "@/lib/client/api";
+import { api, ApiError } from "@/lib/client/api";
 import { channels } from "@/lib/realtime";
 import { useChannel } from "@/lib/client/useChannel";
 
@@ -12,6 +12,19 @@ import { useChannel } from "@/lib/client/useChannel";
 export function useBoardState(tournamentId: string | null) {
   const [state, setState] = useState<BoardState | null>(null);
   const [error, setError] = useState(false);
+  // The HTTP status behind `error` (0 = network/timeout, i.e. never reached the
+  // server). Callers need it to tell "this tournament is gone" (our own 404)
+  // from a transient blip — a distinction `error: boolean` can't carry.
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  // …and WHO said it. A status alone is not a verdict: an HTML 404 from the
+  // edge arrives here as status 404 with the caller's fallback tag
+  // ("board_failed"), never our own "not_found". Callers that act on a 404 must
+  // check both. null when the failure wasn't an ApiError at all.
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  // Consecutive failed refreshes in a row — reset to 0 the moment one succeeds.
+  // Callers use this to escalate a "reconnecting" badge (R7) without needing
+  // their own counter.
+  const [failures, setFailures] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!tournamentId) return;
@@ -19,8 +32,15 @@ export function useBoardState(tournamentId: string | null) {
       const next = await api.board(tournamentId);
       setState(next);
       setError(false);
-    } catch {
+      setErrorStatus(null);
+      setErrorCode(null);
+      setFailures(0);
+    } catch (e) {
+      // Keep the previous `state`: a failed poll must not blank a live board.
       setError(true);
+      setErrorStatus(e instanceof ApiError ? e.status : 0);
+      setErrorCode(e instanceof ApiError ? e.code : null);
+      setFailures((n) => n + 1);
     }
   }, [tournamentId]);
 
@@ -67,5 +87,5 @@ export function useBoardState(tournamentId: string | null) {
     return () => clearInterval(id);
   }, [tournamentId, refresh]);
 
-  return { state, error, refresh };
+  return { state, error, errorStatus, errorCode, failures, refresh };
 }

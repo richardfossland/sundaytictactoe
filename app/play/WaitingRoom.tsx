@@ -97,7 +97,9 @@ export function WaitingRoom({
   // Latch the active game so the result screen survives board refetches until
   // the student dismisses it.
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
-  const { state, refresh } = useBoardState(me.tournamentId);
+  const { state, error, errorStatus, errorCode, refresh } = useBoardState(
+    me.tournamentId,
+  );
   // Advertise that this student is connected (keyed by playerId) so the host can
   // see who's online in the lobby and drop ghosts. Stays active across the
   // waiting view and the in-game child below (this component remains mounted).
@@ -121,6 +123,67 @@ export function WaitingRoom({
       setActiveGameId(null);
     }
   }, [state, activeGameId]);
+
+  // The tournament itself is gone: OUR API said so (404 + our own `not_found`
+  // envelope) and we never got a board. The code check is load-bearing, by this
+  // PR's own rule — an HTML 404 from the edge also arrives as status 404, but
+  // carries the caller tag "board_failed", and it must NOT put a student in
+  // front of a "Logg ut" button that wipes their resume code.
+  // Every OTHER error is deliberately left alone here — `error`/`errorStatus`/
+  // `errorCode` stay in scope for the reconnecting badge (R7); a blip keeps the
+  // last board.
+  const tournamentGone =
+    error && errorStatus === 404 && errorCode === "not_found" && !state;
+
+  // A transient fetch error while we still have SOME state: never wipe the
+  // waiting view (or a latched game below) — just flag the hiccup with a
+  // fixed-position badge, exactly like the host board (BoardClient).
+  const showReconnectBadge = error && !!state;
+  // No state at all, and it's not the "tournament is gone" verdict above: a
+  // full connection loss before the first board ever loaded. Give the student
+  // something to act on instead of an infinite spinner.
+  const showReconnectCard = error && !state && !tournamentGone;
+
+  if (tournamentGone) {
+    return (
+      <main className="center-screen">
+        <div
+          className="card card-narrow stack text-center scale-in"
+          style={{ alignItems: "center" }}
+        >
+          <div className="brandmark" style={{ justifyContent: "center" }}>
+            <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
+          </div>
+          <div style={{ fontSize: 40 }}>🏁</div>
+          <h2 style={{ fontSize: 22 }}>{no.player.tournamentGone}</h2>
+          <p className="muted">{no.player.tournamentGoneBody}</p>
+          <button
+            className="btn btn-primary btn-lg"
+            style={{ marginTop: 6 }}
+            onClick={() => {
+              identity.clearPlayer();
+              onLeave();
+            }}
+          >
+            {no.player.logOut}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (showReconnectCard) {
+    return (
+      <main className="center-screen">
+        <div className="card card-narrow stack text-center" style={{ alignItems: "center" }}>
+          <h2>{no.common.error}</h2>
+          <button className="btn btn-primary btn-lg" onClick={() => refresh()}>
+            {no.common.retry}
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (activeGameId) {
     // Round timer (league rounds only) — fed to the player's board.
@@ -169,6 +232,16 @@ export function WaitingRoom({
 
   return (
     <main className="center-screen">
+      {showReconnectBadge && (
+        <div
+          className="banner banner-wait"
+          style={{ position: "fixed", top: 16, left: 20, zIndex: 40, padding: "6px 12px" }}
+          role="status"
+          aria-live="polite"
+        >
+          {no.player.reconnecting}
+        </div>
+      )}
       <div className="stack" style={{ alignItems: "center", gap: 16, width: "100%", maxWidth: 450 }}>
       <div className="card card-narrow stack text-center scale-in" style={{ alignItems: "center" }}>
         <div className="brandmark" style={{ justifyContent: "center" }}>
@@ -214,7 +287,7 @@ export function WaitingRoom({
             onLeave();
           }}
         >
-          Logg ut
+          {no.player.logOut}
         </button>
       </div>
 
