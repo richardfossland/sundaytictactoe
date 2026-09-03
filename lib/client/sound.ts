@@ -2,9 +2,12 @@
 
 // Tiny synthesized sound effects via Web Audio — no audio files, nothing to
 // download or license. Each cue is a short envelope-shaped oscillator phrase.
-// Muting persists in localStorage. The AudioContext is created lazily on the
+// Muting persists in localStorage (via the safe wrapper — see storage.ts for
+// why direct access is unsafe). The AudioContext is created lazily on the
 // first play() (which in practice happens inside a user gesture — a tap/move —
 // so autoplay policies are satisfied).
+
+import { safeGet, safeSet } from "@/lib/client/storage";
 
 export type SoundName =
   | "move"
@@ -94,15 +97,10 @@ const cues: Record<SoundName, (ac: AudioContext) => void> = {
 
 export const sound = {
   muted(): boolean {
-    if (typeof window === "undefined") return true;
-    return localStorage.getItem(MUTE_KEY) === "1";
+    return safeGet(MUTE_KEY) === "1";
   },
   setMuted(m: boolean) {
-    try {
-      localStorage.setItem(MUTE_KEY, m ? "1" : "0");
-    } catch {
-      // private mode etc. — sounds just stay session-local
-    }
+    safeSet(MUTE_KEY, m ? "1" : "0");
   },
   /** Flip mute; returns the NEW muted state. */
   toggle(): boolean {
