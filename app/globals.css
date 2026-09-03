@@ -488,6 +488,28 @@ a:focus-visible,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* L3: the "draw offer sent" banner gets its own fixed-height slot below the
+ * action row — same reasoning as .turn-slot above: an offer going out or
+ * being declined mid-game must grow/shrink nothing else, so the slot is
+ * always mounted (empty when there's nothing to say) at the same ~57px
+ * height. */
+.notice-slot {
+  width: 100%;
+  min-height: 57px;
+}
+/* L3: a true toast — fixed above the document flow so it can never re-centre
+ * or resize the board underneath it (the old in-flow banner did both: its own
+ * mount/unmount changed .center-screen's flex height, and on `/solo` etc. any
+ * height change re-centres the whole screen). Bottom-anchored so it never
+ * competes with the top-left "reconnecting" badge. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 70;
+  max-width: min(94vw, 560px);
+}
 
 /* ============ PIN hero (projector) ============ */
 .pin-hero {

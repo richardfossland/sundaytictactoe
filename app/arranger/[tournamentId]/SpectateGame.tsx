@@ -126,7 +126,7 @@ export function SpectateGame({
   const winLine = decided ? findWinLine(fen, m, n, k)?.cells ?? null : null;
 
   return (
-    <main className="center-screen">
+    <main className="center-screen is-game">
       {(result === "white_win" || result === "black_win") && <Confetti count={140} />}
       <div className="stack" style={{ alignItems: "center", gap: 14 }}>
         <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={onClose}>
