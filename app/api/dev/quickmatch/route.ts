@@ -13,8 +13,26 @@ import { fail, ok, readJson } from "@/lib/server/http";
 // get two named players into one game"). Returns both players' bearer
 // identities so two browser tabs can play the §4 flow end-to-end.
 export async function POST(req: Request) {
-  // Test seam only — available in dev, always 404 in a production build.
-  if (process.env.NODE_ENV === "production") return fail(404, "not_found");
+  // Test seam. Open in dev; 404 in a production build UNLESS the process was
+  // started with E2E_SEAM=1.
+  //
+  // WHY TWO VARIABLES. `process.env.NODE_ENV` is INLINED by the compiler, so a
+  // production bundle has the literal `"production" === "production"` baked in
+  // and no env var can reopen it. `E2E_SEAM` is an ordinary server env var —
+  // Next only inlines `NEXT_PUBLIC_*` (node_modules/next/dist/docs/01-app/
+  // 02-guides/environment-variables.md) — so it is read from the PROCESS at
+  // request time. That is exactly what the e2e suite needs: the same production
+  // build we ship, started locally with E2E_SEAM=1, opens the seam without a
+  // separate build flavour.
+  //
+  // ⚠️ E2E_SEAM MUST NEVER BE SET ON THE WORKER. Setting it in production would
+  // let anyone mint tournaments, players and games at will. It belongs only in
+  // the local/CI `next start` process (`npm run e2e:server`). See docs/E2E.md.
+  // Note the strict `!== "1"`: any other value (including "0", "true", "") keeps
+  // the seam shut, so a half-set variable fails CLOSED.
+  if (process.env.NODE_ENV === "production" && process.env.E2E_SEAM !== "1") {
+    return fail(404, "not_found");
+  }
 
   const body = await readJson<{ white?: string; black?: string }>(req);
   const whiteName = (body?.white ?? "Hvit").toString().slice(0, 40);

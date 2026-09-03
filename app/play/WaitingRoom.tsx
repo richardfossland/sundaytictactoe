@@ -279,7 +279,7 @@ export function WaitingRoom({
   const myTeam = meRow?.team ?? null;
 
   return (
-    <main className="center-screen">
+    <main className="center-screen" data-testid="waiting-room">
       {showReconnectBadge && (
         <div
           className="banner banner-wait"

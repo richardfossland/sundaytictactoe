@@ -45,6 +45,13 @@ export function MnkBoard({
           <button
             key={i}
             type="button"
+            // Stable test hooks. `data-cell` is the grid index and `data-mark`
+            // is "x"/"o"/"" — attributes only, read by e2e/pages/board.ts, so a
+            // restyle (class names) or a copy pass (aria-label) cannot move
+            // them. `i` is a number: cell 0 renders `data-cell="0"`, not a
+            // missing attribute the way a falsy boolean would.
+            data-cell={i}
+            data-mark={filled ? mark : ""}
             className={[
               "mnk-cell",
               filled ? `mnk-${mark}` : "mnk-empty",
