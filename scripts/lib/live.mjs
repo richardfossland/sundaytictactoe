@@ -62,14 +62,17 @@ let pinnedDispatcherFor;
 
 async function dispatcherPinnedTo(ip) {
   if (pinnedDispatcherFor?.ip !== ip) {
-    const { Agent } = await import("undici");
+    const { Agent, fetch: undiciFetch } = await import("undici");
     const lookup = (_hostname, options, callback) => {
       if (options?.all) callback(null, [{ address: ip, family: 4 }]);
       else callback(null, ip, 4);
     };
-    pinnedDispatcherFor = { ip, agent: new Agent({ connect: { lookup } }) };
+    // Node's built-in fetch bundles its OWN undici; a dispatcher from the npm
+    // package (a different major) is rejected with "invalid onRequestStart
+    // method". So when pinning, use the npm package's fetch as well.
+    pinnedDispatcherFor = { ip, agent: new Agent({ connect: { lookup } }), fetch: undiciFetch };
   }
-  return pinnedDispatcherFor.agent;
+  return pinnedDispatcherFor;
 }
 
 /**
@@ -88,12 +91,17 @@ export async function fetchJson(path, init = {}, { retries } = {}) {
     method,
     headers: { "content-type": "application/json", ...(init.headers ?? {}) },
   };
-  if (process.env.IP) opts.dispatcher = await dispatcherPinnedTo(process.env.IP);
+  let doFetch = fetch;
+  if (process.env.IP) {
+    const pinned = await dispatcherPinnedTo(process.env.IP);
+    opts.dispatcher = pinned.agent;
+    doFetch = pinned.fetch;
+  }
 
   let lastErr;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await fetch(`${BASE}${path}`, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const res = await doFetch(`${BASE}${path}`, { ...opts, signal: AbortSignal.timeout(TIMEOUT_MS) });
       const text = await res.text();
       let json;
       try {
