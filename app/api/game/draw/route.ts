@@ -2,6 +2,7 @@ import { getGame, resolveGameRpc, setDrawOffer } from "@/lib/server/store";
 import { authPlayer } from "@/lib/server/auth";
 import { afterGameResolved } from "@/lib/server/gameEvents";
 import { broadcast } from "@/lib/server/broadcast";
+import { defer } from "@/lib/server/defer";
 import { channels } from "@/lib/realtime";
 import { fail, ok, readJson } from "@/lib/server/http";
 
@@ -45,13 +46,15 @@ async function handlePost(req: Request): Promise<Response> {
 
   if (body.action === "offer") {
     await setDrawOffer(game.id, player.id);
-    await broadcast(topic, "draw_offer", { by: player.id });
+    // The offer is stored; notifying the opponent is a hint layer, so it runs
+    // after the response (see lib/server/defer.ts).
+    defer(() => broadcast(topic, "draw_offer", { by: player.id }), "draw:offer");
     return ok({ offered: true });
   }
 
   if (body.action === "decline") {
     await setDrawOffer(game.id, null);
-    await broadcast(topic, "draw_declined", { by: player.id });
+    defer(() => broadcast(topic, "draw_declined", { by: player.id }), "draw:decline");
     return ok({ declined: true });
   }
 
@@ -63,6 +66,6 @@ async function handlePost(req: Request): Promise<Response> {
 
   const result = await resolveGameRpc(game.id, "draw", "play", /* requireLive */ true);
   if (!result.ok) return fail(409, result.conflict ?? "conflict");
-  await afterGameResolved(game, "draw", "play");
+  defer(() => afterGameResolved(game, "draw", "play"), "draw:accept");
   return ok({ status: "draw" });
 }

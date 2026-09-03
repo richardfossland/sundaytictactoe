@@ -1,19 +1,37 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Game, Player } from "@/lib/types";
 
-const { store } = vi.hoisted(() => ({
+const { store, deferred } = vi.hoisted(() => ({
   store: {
     getGame: vi.fn(),
     resolveGameRpc: vi.fn(),
     setDrawOffer: vi.fn(),
   },
+  // R8: broadcasts + scoring are handed to defer() and run after the response.
+  deferred: [] as Array<() => Promise<void>>,
 }));
 const authPlayer = vi.fn();
+const afterGameResolved = vi.fn();
+const broadcast = vi.fn();
 
 vi.mock("@/lib/server/store", () => store);
 vi.mock("@/lib/server/auth", () => ({ authPlayer: (...a: unknown[]) => authPlayer(...a) }));
-vi.mock("@/lib/server/gameEvents", () => ({ afterGameResolved: vi.fn() }));
-vi.mock("@/lib/server/broadcast", () => ({ broadcast: vi.fn() }));
+vi.mock("@/lib/server/gameEvents", () => ({
+  afterGameResolved: (...a: unknown[]) => afterGameResolved(...a),
+}));
+vi.mock("@/lib/server/broadcast", () => ({
+  broadcast: (...a: unknown[]) => broadcast(...a),
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
 
 import { POST } from "@/app/api/game/draw/route";
 
@@ -55,8 +73,11 @@ function req(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deferred.length = 0;
   store.resolveGameRpc.mockResolvedValue({ ok: true, status: "draw" });
   store.setDrawOffer.mockResolvedValue(undefined);
+  afterGameResolved.mockResolvedValue(undefined);
+  broadcast.mockResolvedValue(undefined);
 });
 
 describe("POST /api/game/draw", () => {
@@ -76,6 +97,10 @@ describe("POST /api/game/draw", () => {
     const res = await POST(req({ gameId: "g1", playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
     expect(res.status).toBe(200);
     expect(store.setDrawOffer).toHaveBeenCalledWith("g1", "white");
+    // R8: the offer is answered before the opponent is notified.
+    expect(broadcast).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(broadcast).toHaveBeenCalledWith("game:g1", "draw_offer", { by: "white" });
   });
 
   it("accept WITHOUT a pending offer does NOT draw", async () => {
@@ -99,6 +124,12 @@ describe("POST /api/game/draw", () => {
     store.getGame.mockResolvedValue(makeGame({ draw_offered_by: "white" }));
     const res = await POST(req({ gameId: "g1", playerId: "black", resumeCode: "AAAA-AA", action: "accept" }));
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "draw" });
     expect(store.resolveGameRpc).toHaveBeenCalledWith("g1", "draw", "play", true);
+    // R8: the draw is confirmed to both players before scoring + broadcasts run.
+    expect(afterGameResolved).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(afterGameResolved).toHaveBeenCalledOnce();
+    expect(afterGameResolved.mock.calls[0].slice(1)).toEqual(["draw", "play"]);
   });
 });

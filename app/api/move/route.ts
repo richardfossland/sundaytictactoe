@@ -12,6 +12,7 @@ import {
   broadcastPosition,
   broadcastSpectate,
 } from "@/lib/server/gameEvents";
+import { defer } from "@/lib/server/defer";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
 import type { Turn } from "@/lib/types";
 
@@ -93,22 +94,29 @@ async function handleMove(req: Request): Promise<Response> {
   if (game.draw_offered_by) await setDrawOffer(game.id, null);
 
   // 6. Broadcast the new authoritative position (hint to refetch/sync) — to the
-  //    players' game channel and the teacher's tournament-wide spectate feed.
-  await broadcastPosition(game.id, applied.fen, applied.turn as Turn, applied.status, {
-    cell: body.cell,
-  });
-  await broadcastSpectate(
-    game.tournament_id,
-    game.id,
-    applied.fen,
-    applied.turn as Turn,
-    applied.status,
-  );
-
-  // 7. If the game ended on this move, run resolution side-effects.
-  if (applied.status !== "live") {
-    await afterGameResolved(game, applied.status, "play");
-  }
+  //    players' game channel and the teacher's tournament-wide spectate feed —
+  //    and, if the game ended on this move, run the resolution side-effects.
+  //
+  //    All of it runs AFTER the response (lib/server/defer.ts): the move is
+  //    already committed by the RPC above, so making the player wait on up to
+  //    ~20 s of broadcasts and score recomputation only risked their 8 s client
+  //    timeout rolling the board back on the very move that ended the game.
+  const lastMove = { cell: body.cell };
+  defer(async () => {
+    await Promise.all([
+      broadcastPosition(game.id, applied.fen, applied.turn as Turn, applied.status, lastMove),
+      broadcastSpectate(
+        game.tournament_id,
+        game.id,
+        applied.fen,
+        applied.turn as Turn,
+        applied.status,
+      ),
+    ]);
+    if (applied.status !== "live") {
+      await afterGameResolved(game, applied.status, "play");
+    }
+  }, "move");
 
   return ok({
     fen: applied.fen,
