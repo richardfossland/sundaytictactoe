@@ -170,7 +170,9 @@ test("a move posted into a dead network rolls back and releases the lock", async
         message: "the two devices never converged after the network returned",
       })
       .toBe("x");
-    expect(await o.markAt(4)).toBeNull();
+    // Exactly ONE mark on the server's board: neither offline attempt left a
+    // ghost move behind to be delivered late.
+    expect(await o.marks()).toEqual(["x", null, null, null, null, null, null, null, null]);
   } finally {
     await Promise.all(contexts.map((c) => c.close()));
   }

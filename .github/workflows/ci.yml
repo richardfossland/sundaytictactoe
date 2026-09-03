@@ -45,4 +45,4 @@ jobs:
     needs: check
     uses: ./.github/workflows/e2e.yml
     with:
-      projects: desktop-chromium
+      projects: desktop-chromium mobile-chromium
