@@ -366,6 +366,19 @@ export const no = {
     premoveCancelled: "Forhåndstrekket ble forkastet",
     gameLoadFailed: "Fant ikke partiet. Prøv igjen eller gå tilbake.",
     sessionExpired: "Den forrige økten din er utløpt. Bli med på nytt.",
+    // Removed from the lobby (usually the ghost-sweep after a locked phone).
+    // Never silence: say it happened, and give them the one button that fixes it.
+    removedLobbyTitle: "Fjernet fra lobbyen",
+    removedLobbyBody:
+      "Du ble borte en stund, så arrangøren tok deg ut av lobbyen. Trykk under, så er du med igjen.",
+    rejoinLobby: "Bli med igjen",
+    rejoinFailed: "Klarte ikke å bli med igjen. Prøv en gang til.",
+    // Removed after the tournament started — the pairings are set, so they have
+    // to join afresh rather than slipping silently back in.
+    removedTitle: "Du ble fjernet fra turneringen",
+    removedBody:
+      "Arrangøren har tatt deg ut. Du kan bli med på nytt med PIN-en fra tavla.",
+    rejoinNew: "Bli med på nytt",
     oppOutOfTime: "Motstanderens tid er ute!",
     claimWin: "Krev seier på tid",
     myTimeOut: "Tiden din er ute",
