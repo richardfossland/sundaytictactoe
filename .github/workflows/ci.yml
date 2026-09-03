@@ -1,4 +1,5 @@
-# CI — every push/PR runs the same gate as local `npm run check`.
+# CI — every push/PR runs `npm run check` (lint + typecheck + test), the same
+# gate expected locally before committing.
 name: ci
 on:
   push:
@@ -15,9 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
+      - run: npm run check
 
   build:
     # The OpenNext/Cloudflare build catches bundling/runtime breaks the check job

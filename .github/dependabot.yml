@@ -9,6 +9,11 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # eslint 10 is a major bump (flat-config/rule churn) — upgrade deliberately,
+      # not via an automated PR.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
