@@ -76,6 +76,14 @@ steps.
 `tictactoe.sundaysuite.app` at Vercel. The app is platform-agnostic; use this
 if the Worker runtime surfaces an incompatibility.
 
+## Uptime monitor
+
+A GitHub Actions cron (`.github/workflows/uptime.yml`, every 10 min) probes
+`tictactoe.sundaysuite.app` from an external vantage point — catching
+edge-level drops a Worker cron can't see itself failing. Targets/budgets live
+in `.github/uptime-targets.json`; run it locally with `npm run probe`. A
+breach files/updates a GitHub issue labelled `uptime`; recovery closes it.
+
 ## Optional: teacher accounts via suite auth
 
 `tournaments.host_user_id` is a ready seam for a real Supabase-Auth teacher
