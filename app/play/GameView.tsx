@@ -80,18 +80,21 @@ function SidePanel({
             <MarkChip color={color} label={colorLabel} />
           </div>
         </div>
-        {active && (
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              background: "var(--turn)",
-              boxShadow: "0 0 0 0 color-mix(in srgb, var(--turn) 70%, transparent)",
-              animation: "ping 1.6s var(--ease-out) infinite",
-            }}
-          />
-        )}
+        {/* Always mounted, reserved 9x9 — toggling `active` only changes
+            visibility/animation, never removes the element, so its own
+            width/gap can't come and go and nudge the row (L2). */}
+        <span
+          style={{
+            width: 9,
+            height: 9,
+            flexShrink: 0,
+            borderRadius: "50%",
+            background: "var(--turn)",
+            visibility: active ? "visible" : "hidden",
+            boxShadow: "0 0 0 0 color-mix(in srgb, var(--turn) 70%, transparent)",
+            animation: active ? "ping 1.6s var(--ease-out) infinite" : "none",
+          }}
+        />
       </div>
     </div>
   );
@@ -517,25 +520,39 @@ export function GameView({
 
         {/* centre: timer + turn banner + board + actions */}
         <div className="game-center">
-          {timer && timer.startedAt && !ended && (
-            <RoundTimer
-              startedAt={timer.startedAt}
-              durationSec={timer.durationSec}
-              extendedMs={timer.extendedMs ?? 0}
-              compact
-            />
+          {timer && timer.startedAt && (
+            // Kept mounted (visibility, not unmount) once the round timer has
+            // ever been present, so its slot's height never disappears out
+            // from under the banner/board when the game ends (L2). Never
+            // rendered at all when no timer is configured for this round —
+            // that's a fixed property of the round, not a mid-game change.
+            <div style={ended ? { visibility: "hidden" } : undefined}>
+              <RoundTimer
+                startedAt={timer.startedAt}
+                durationSec={timer.durationSec}
+                extendedMs={timer.extendedMs ?? 0}
+                compact
+              />
+            </div>
           )}
 
-          {!ended && (
+          {/* One fixed banner slot, ALWAYS mounted (L2: visibility:hidden at
+              game end, never unmounted) so nothing above .board-shell can
+              change height mid-game. .turn-slot reserves one line of .banner
+              (~57px, see globals.css) and .banner-line clips with an
+              ellipsis instead of wrapping to a second line. */}
+          <div className="turn-slot" style={ended ? { visibility: "hidden" } : undefined}>
             <div
               className={`banner ${isMyTurn ? "banner-turn" : "banner-wait"}`}
               style={{ width: "100%" }}
               role="status"
               aria-live="polite"
             >
-              {isMyTurn ? `✕ ${no.player.yourTurn}` : no.player.opponentTurn}
+              <span className="banner-line">
+                {isMyTurn ? `✕ ${no.player.yourTurn}` : no.player.opponentTurn}
+              </span>
             </div>
-          )}
+          </div>
 
           <div className="board-frame">
             <div
@@ -566,29 +583,32 @@ export function GameView({
             />
           )}
 
-          {!ended && (
-            <div className="row">
-              <button
-                className="btn btn-ghost"
-                disabled={pending || drawSent || acting}
-                onClick={() =>
-                  runMeta(
-                    api.draw(gameId, me.playerId, me.resumeCode, "offer"),
-                    () => setDrawSent(true),
-                  )
-                }
-              >
-                ½ {no.player.offerDraw}
-              </button>
-              <button
-                className="btn btn-danger"
-                disabled={pending || acting}
-                onClick={() => setConfirmResign(true)}
-              >
-                {no.player.resign}
-              </button>
-            </div>
-          )}
+          {/* Always mounted (L2): visibility:hidden at game end instead of
+              unmounting, so this row's height never vanishes out from under
+              the board while the result overlay fades in. Buttons are also
+              explicitly disabled at `ended` — belt-and-braces alongside the
+              visibility toggle, matching the existing disabled logic below. */}
+          <div className="row" style={ended ? { visibility: "hidden" } : undefined}>
+            <button
+              className="btn btn-ghost"
+              disabled={pending || drawSent || acting || ended}
+              onClick={() =>
+                runMeta(
+                  api.draw(gameId, me.playerId, me.resumeCode, "offer"),
+                  () => setDrawSent(true),
+                )
+              }
+            >
+              ½ {no.player.offerDraw}
+            </button>
+            <button
+              className="btn btn-danger"
+              disabled={pending || acting || ended}
+              onClick={() => setConfirmResign(true)}
+            >
+              {no.player.resign}
+            </button>
+          </div>
 
           {drawSent && !ended && (
             <div className="banner banner-wait" style={{ width: "100%" }} role="status" aria-live="polite">
@@ -630,7 +650,11 @@ export function GameView({
 
           {toast && <div className="banner banner-error" style={{ width: "100%" }}>{toast}</div>}
 
-          {sans.length > 0 && <MoveList sans={sans} />}
+          {/* Always mounted (L2) — MoveList already renders a "–" placeholder
+              for an empty list, and .movelist now has a fixed height, so it's
+              the same block from the very first render, not something that
+              pops in and grows over the first ~6 moves. */}
+          <MoveList sans={sans} />
         </div>
 
         {/* me — right on wide, bottom on narrow */}
