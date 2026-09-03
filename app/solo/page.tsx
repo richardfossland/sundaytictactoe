@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { applyMove } from "@/lib/ttt/validateMove";
-import { chooseMove, type BotLevel } from "@/lib/ttt/bot";
+import type { BotLevel } from "@/lib/ttt/bot";
+import { requestBotMove } from "@/lib/client/engine";
 import { findWinLine } from "@/lib/ttt/win";
 import { VARIANTS, variantStartState, type MnkVariant } from "@/lib/ttt/variants";
 import { Confetti } from "@/lib/client/Confetti";
@@ -40,6 +41,12 @@ export default function Solo() {
   const [thinking, setThinking] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
+  // Bumped whenever the position the bot was asked about stops being the
+  // position on screen (new game, undo, variant switch). A reply carrying an old
+  // number is dropped — the search runs off-thread now, so it can land after the
+  // board it was thinking about is gone.
+  const gameSeq = useRef(0);
+
   const myLetter = playerColor === "white" ? "w" : "b";
   const turn = turnOf(state);
   const isMyTurn = !thinking && !outcome && turn === myLetter;
@@ -57,28 +64,33 @@ export default function Solo() {
     return true;
   }
 
-  // The bot replies. chooseMove runs on the main thread (microseconds-to-ms even
-  // on the largest board), wrapped in a short delay so the player's mark renders
-  // first and the reply feels deliberate.
-  function botPlay(board: string) {
+  // The bot replies. The search is dispatched to a Web Worker IMMEDIATELY and
+  // raced against a 320 ms floor: the floor keeps the reply feeling deliberate
+  // (and lets the player's own mark render first), while the search runs off the
+  // main thread, so "Datamaskinen tenker …" actually animates instead of the tab
+  // locking up behind it. On a browser without workers the gateway falls back to
+  // the same synchronous search and this behaves exactly as it used to.
+  async function botPlay(board: string) {
+    const seq = gameSeq.current;
     setThinking(true);
     setHistory((h) => [...h, board]);
-    setTimeout(() => {
-      const cell = chooseMove(board, variant, level);
-      if (cell === null) {
-        setThinking(false);
-        return;
-      }
+    try {
+      const [cell] = await Promise.all([
+        requestBotMove(board, variant, level),
+        new Promise((r) => setTimeout(r, 320)),
+      ]);
+      if (seq !== gameSeq.current) return; // this game is over; drop the reply
+      if (cell === null) return;
       const res = applyMove(board, { cell }, undefined, variant);
-      if (!res.ok) {
-        setThinking(false);
-        return;
-      }
+      if (!res.ok) return;
       setState(res.fen);
       setLastCell(cell);
-      setThinking(false);
       settleFrom(res.status);
-    }, 320);
+    } finally {
+      // Only if we are still the current game — a newer botPlay may already own
+      // the thinking flag.
+      if (seq === gameSeq.current) setThinking(false);
+    }
   }
 
   function tryMove(cell: number) {
@@ -90,10 +102,11 @@ export default function Solo() {
     setLastCell(cell);
     sound.play("move");
     if (settleFrom(res.status)) return;
-    botPlay(res.fen);
+    void botPlay(res.fen);
   }
 
   function start() {
+    gameSeq.current++;
     const color: Color =
       colorPref === "random" ? (Math.random() < 0.5 ? "white" : "black") : colorPref;
     setPlayerColor(color);
@@ -105,11 +118,12 @@ export default function Solo() {
     setThinking(false);
     setPhase("game");
     sound.play("start");
-    if (color === "black") botPlay(s); // computer (X) opens
+    if (color === "black") void botPlay(s); // computer (X) opens
   }
 
   function undo() {
     if (thinking || history.length === 0) return;
+    gameSeq.current++;
     const back = history.length >= 2 ? 2 : 1;
     setState(history[history.length - back]);
     setHistory(history.slice(0, history.length - back));
@@ -153,7 +167,10 @@ export default function Solo() {
                   key={v.id}
                   className={`btn ${variant.id === v.id ? "btn-primary" : "btn-ghost"}`}
                   style={{ padding: "10px 8px" }}
-                  onClick={() => setVariant(v)}
+                  onClick={() => {
+                    gameSeq.current++;
+                    setVariant(v);
+                  }}
                 >
                   {v.label}
                 </button>
