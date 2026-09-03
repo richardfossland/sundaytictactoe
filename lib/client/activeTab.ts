@@ -5,7 +5,7 @@
 // experiences as "I can't move my pieces". So exactly one tab per player may be
 // the live board; the others go passive and show a "play here" prompt.
 //
-// THE PROTOCOL (over a BroadcastChannel named `sjakk-tab:<key>`)
+// THE PROTOCOL (over a BroadcastChannel named `ttt-tab:<key>`)
 //
 //   claim     {claim}  "I am the board now."  Newest `ts` wins; same-ms ties
 //                      break by tabId, so two tabs never both go passive and
