@@ -105,6 +105,19 @@ export function LobbyView({
       !needsSyncRef.current,
     );
     needsSyncRef.current = false;
+    // L5 note (port of sundaychess#84): `present` now keeps its reference when
+    // MEMBERSHIP is unchanged, so this effect no longer runs on every presence
+    // sync in the class — only when someone actually joins or leaves.
+    // `recordPresence` was already idempotent for a repeated identical
+    // snapshot (it stamps `leftAt` once, and seen/kicked are sets), so the
+    // books are unaffected. The one visible consequence is the `needsSync`
+    // handshake above: after a resubscribe whose membership is byte-identical
+    // there is nothing to absorb, so the latch stays armed until the next
+    // snapshot that actually differs — i.e. R4's "don't stamp what our socket
+    // may simply not know yet" rule now applies to the first INFORMATIVE
+    // snapshot rather than the first snapshot full stop. Strictly more
+    // conservative: it can only delay a ghost sweep, never kick someone it
+    // wouldn't have.
   }, [present]);
 
   function kick(playerId: string) {

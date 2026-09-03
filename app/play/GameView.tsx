@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { GameDetail } from "@/lib/dto";
 import type { GameStatus, Turn } from "@/lib/types";
 import { api, ApiError, NON_JSON } from "@/lib/client/api";
@@ -10,6 +10,7 @@ import { findWinLine } from "@/lib/ttt/win";
 import { plyOf } from "@/lib/ttt/ply";
 import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 import { MnkBoard } from "@/lib/client/MnkBoard";
+import { sameDetail } from "@/lib/client/equal";
 import { channels } from "@/lib/realtime";
 import { useChannel } from "@/lib/client/useChannel";
 import { useActiveTab } from "@/lib/client/useActiveTab";
@@ -101,7 +102,14 @@ function SidePanel({
   );
 }
 
-export function GameView({
+/** L5 port (sundaychess#84): `memo`'d. WaitingRoom is this component's
+ * always-mounted parent and re-renders on board polls, presence events and its
+ * own state — none of which the board cares about. Every prop below is a
+ * primitive or a stable reference (see the derivation block in WaitingRoom),
+ * so the default shallow comparison is enough; `<MnkBoard>` inside is a SECOND
+ * memo boundary that additionally absorbs GameView's own re-renders (toasts,
+ * the reconnecting badge, the `pending` flip on every move). */
+export const GameView = memo(function GameView({
   me,
   gameId,
   onFinished,
@@ -175,7 +183,13 @@ export function GameView({
 
   const load = useCallback(async () => {
     const d = await api.game(gameId);
-    setDetail(d); // names/pgn are always safe to refresh
+    // Names/pgn are always safe to refresh — but L5 (port of sundaychess#84):
+    // only as a NEW object when a field the UI reads actually changed. This
+    // runs every 3 s, and between two moves every field is identical;
+    // adopting the fetched object anyway re-rendered GameView (and the whole
+    // board) for nothing. The ply-guarded position writes below are untouched
+    // and remain authoritative.
+    setDetail((prev) => (sameDetail(prev, d) ? prev : d));
     // Ply-guard exactly like the broadcast handler: a slow in-flight GET that
     // resolves AFTER a fresher move must not roll the board back to a stale ply.
     const fresh = plyOf(d.fen) >= plyOf(confirmedFen.current || d.fen);
@@ -736,4 +750,4 @@ export function GameView({
       <FullscreenToggle />
     </main>
   );
-}
+});

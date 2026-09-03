@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { acquireChannel } from "@/lib/supabase/channelRegistry";
+import { sameSet } from "@/lib/client/equal";
 
 /** Track and/or observe Supabase Realtime presence on `topic`.
  *
@@ -16,8 +17,13 @@ import { acquireChannel } from "@/lib/supabase/channelRegistry";
  * presence set that says nothing about the class, and acting on it evicts
  * everyone (see LobbyView).
  *
- * Returns the set of presence keys currently online (recomputed on every
- * sync/join/leave). Shares the one memoised browser client / socket. */
+ * Returns the set of presence keys currently online. The registry recomputes
+ * it on every presence sync/join/leave in the whole class and hands us a FRESH
+ * `Set` each time; L5 (port of sundaychess#84) keeps the previous reference
+ * when MEMBERSHIP is unchanged, so one student's phone waking up no longer
+ * re-renders every other client's tree (in the player app that parent is
+ * WaitingRoom, whose child is the live board). Shares the one memoised browser
+ * client / socket. */
 export function usePresence(
   topic: string | null,
   trackKey?: string,
@@ -37,7 +43,8 @@ export function usePresence(
     // owns track()/presenceState() and fans the present-key set out to us.
     const { release } = acquireChannel(topic, {
       trackKey,
-      onPresence: (keys) => setPresent(keys),
+      onPresence: (keys) =>
+        setPresent((prev) => (sameSet(prev, keys) ? prev : keys)),
       onStatus: (status) => statusRef.current?.(status),
     });
     return release;

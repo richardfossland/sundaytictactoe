@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BoardState, PublicGame } from "@/lib/dto";
 import { useBoardState } from "@/lib/client/useBoardState";
 import { usePresence } from "@/lib/client/usePresence";
@@ -127,6 +127,49 @@ export function WaitingRoom({
     }
   }, [state, activeGameId]);
 
+  // --- L5 (port of sundaychess#84): the props handed to <GameView> below ---
+  //
+  // GameView is `memo`'d, and this component is its ALWAYS-MOUNTED parent: it
+  // re-renders on every board poll and every presence event in the class. Both
+  // of those are now no-ops when nothing changed (useBoardState / usePresence),
+  // but a re-render for any OTHER reason must still not reach the board — so
+  // every prop below has to be a primitive or a stable reference.
+  //
+  // Derived up here, before the early returns, so the hooks run unconditionally
+  // (they used to live inside the `if (activeGameId)` branch, where a hook
+  // cannot go). `me` is set once in app/play/page.tsx, so it's already stable;
+  // `reactionsEnabled` and `variant` below are primitives (boolean/string), so
+  // React's default prop comparison already stops them from forcing a render.
+  const activeGame = activeGameId
+    ? state?.games.find((g) => g.id === activeGameId)
+    : undefined;
+  const activeRound = activeGame
+    ? state?.rounds.find((r) => r.id === activeGame.roundId)
+    : undefined;
+  // Round timer (league rounds only) — fed to the player's board. Rebuilt only
+  // when one of the three primitives it derives from actually changes; it used
+  // to be a fresh object literal on every render of this component.
+  const timerSec = state?.tournament.config.roundTimerSec ?? null;
+  const roundStartedAt = activeRound?.startedAt ?? null;
+  const roundExtendedMs = activeRound?.extendedMs ?? 0;
+  const timer = useMemo(
+    () =>
+      timerSec && roundStartedAt
+        ? {
+            startedAt: roundStartedAt,
+            durationSec: timerSec,
+            extendedMs: roundExtendedMs,
+          }
+        : null,
+    [timerSec, roundStartedAt, roundExtendedMs],
+  );
+  // `refresh` is itself a useCallback over [tournamentId], and setActiveGameId
+  // is a stable setter, so this closure is stable too.
+  const onGameFinished = useCallback(() => {
+    setActiveGameId(null);
+    refresh();
+  }, [refresh]);
+
   // The tournament itself is gone: OUR API said so (404 + our own `not_found`
   // envelope) and we never got a board. The code check is load-bearing, by this
   // PR's own rule — an HTML 404 from the edge also arrives as status 404, but
@@ -235,20 +278,6 @@ export function WaitingRoom({
   }
 
   if (activeGameId) {
-    // Round timer (league rounds only) — fed to the player's board.
-    const activeGame = state?.games.find((g) => g.id === activeGameId);
-    const activeRound = activeGame
-      ? state?.rounds.find((r) => r.id === activeGame.roundId)
-      : null;
-    const timerSec = state?.tournament.config.roundTimerSec ?? null;
-    const timer =
-      timerSec && activeRound?.startedAt
-        ? {
-            startedAt: activeRound.startedAt,
-            durationSec: timerSec,
-            extendedMs: activeRound.extendedMs ?? 0,
-          }
-        : null;
     return (
       <GameView
         me={me}
@@ -256,10 +285,7 @@ export function WaitingRoom({
         timer={timer}
         reactionsEnabled={state?.tournament.config.reactions === true}
         variant={state?.tournament.config.variant}
-        onFinished={() => {
-          setActiveGameId(null);
-          refresh();
-        }}
+        onFinished={onGameFinished}
       />
     );
   }

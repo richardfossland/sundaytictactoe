@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/client/api";
 import { channels } from "@/lib/realtime";
 import { useChannel } from "@/lib/client/useChannel";
 import { useTabHidden } from "@/lib/client/useTabHidden";
+import { sameJson } from "@/lib/client/equal";
 
 /** Fetch authoritative board state on mount, keep it fresh by refetching on any
  * lobby-channel event, and expose a manual refresh. Used by both the host board
@@ -31,7 +32,16 @@ export function useBoardState(tournamentId: string | null) {
     if (!tournamentId) return;
     try {
       const next = await api.board(tournamentId);
-      setState(next);
+      // L5 (port of sundaychess#84): keep the PREVIOUS object when the board
+      // is byte-identical. This poll fires every 5 s and used to hand every
+      // consumer a new `state` reference each time — in the player app that
+      // re-rendered WaitingRoom and, with it, the whole live board.
+      // BoardState is a few KB of plain JSON straight off the wire, so
+      // `JSON.stringify` equality is far cheaper than the render it prevents
+      // (see lib/client/equal.ts). `error`/`errorStatus`/`errorCode`/
+      // `failures` are untouched below: they already carry primitive values,
+      // so React bails out on its own when they are reset to the same value.
+      setState((prev) => (sameJson(prev, next) ? prev : next));
       setError(false);
       setErrorStatus(null);
       setErrorCode(null);
