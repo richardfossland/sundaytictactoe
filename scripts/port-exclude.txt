@@ -1,0 +1,101 @@
+# scripts/port-exclude.txt
+#
+# Paths that scripts/port-from-chess.sh strips out of a cherry-picked
+# sundaychess commit before committing it here, and that
+# scripts/port-status.sh ignores when it decides whether a chess commit is
+# "infra" (portable) or "chess-only" (nothing to port).
+#
+# One glob per line. `*` matches anything, including `/` (so `lib/chess/**`
+# and `lib/chess/*` behave the same — there is no directory-boundary
+# distinction). `[` and `]` are treated as LITERAL characters, not a bracket
+# expression, because Next.js dynamic-route folders such as `[tournamentId]`
+# are real directory names on disk. Blank lines and `#` comments are ignored.
+# See scripts/lib/port-common.sh for the matcher.
+#
+# Rationale, by group:
+#
+# Chess rules/engine/coach/puzzles — TTT has its own game logic (lib/ttt/**)
+# and none of this applies.
+lib/chess/**
+lib/coach/**
+lib/puzzles.ts
+lib/server/clock.ts
+lib/server/llm.ts
+lib/supabase/auth-middleware.ts
+lib/client/CapturedPieces.tsx
+lib/client/ChessClock.tsx
+lib/client/EvalBar.tsx
+lib/client/HypeCallout.tsx
+lib/client/PromotionPicker.tsx
+lib/client/PuzzleCard.tsx
+lib/client/ReplayBoard.tsx
+lib/client/engine.ts
+lib/client/useEval.ts
+lib/client/identity.ts
+lib/locale/no.ts
+
+# Chess-only pages/routes/components — TTT has its own equivalents (app/ttt
+# board, its own /solo) or doesn't have the feature at all (coach, review,
+# claim-a-seat).
+app/solo/**
+app/api/coach/**
+app/api/review/**
+app/api/game/claim/**
+app/play/ReviewView.tsx
+# Chess nests the per-tournament host route as app/host/[tournamentId]/**;
+# TTT nests the same idea under app/arranger/[tournamentId]/** instead.
+app/host/[tournamentId]/**
+# Brand styling (colors, board theme) lives here — never share verbatim.
+app/globals.css
+
+# App identity / deploy config — every one of these names the app, its
+# domain, or its Cloudflare project, so a verbatim copy would silently
+# rebrand or redeploy the wrong app.
+middleware.ts
+wrangler.jsonc
+.env.example
+README.md
+docs/**
+LICENSE
+CONTRIBUTING.md
+
+# TTT owns its own schema; chess migrations don't apply and would collide
+# with TTT's own numbering.
+supabase/migrations/**
+# Placeholder file the chess e2e recipe needs present for `supabase db
+# reset`; meaningless without the e2e suite (see e2e/** below).
+supabase/seed.sql
+
+# Per-app uptime probe targets (URLs are app-specific).
+.github/uptime-targets.json
+
+# TTT doesn't have the Playwright e2e suite yet (tracked separately as T2).
+# Pull this back out once T2 lands.
+e2e/**
+playwright.config.ts
+
+# Chess-only tests: each one exercises a module that lives under one of the
+# excluded paths above (lib/chess/**, lib/coach/**, lib/puzzles.ts,
+# lib/server/llm.ts, or app/api/review/**), so there is nothing on the TTT
+# side for them to test.
+test/analysis.test.ts
+test/bot.test.ts
+test/captured.test.ts
+test/clock.test.ts
+test/coach.test.ts
+test/drawReason.test.ts
+test/engineProtocol.test.ts
+test/evalBar.test.ts
+test/material.test.ts
+test/openings.test.ts
+test/ply.test.ts
+test/premove.test.ts
+test/promotion.test.ts
+test/puzzles.test.ts
+test/reviewLlm.test.ts
+test/reviewRoute.test.ts
+test/reviewSummary.test.ts
+test/search.test.ts
+test/skill.test.ts
+test/validateMove.test.ts
+test/variants.test.ts
