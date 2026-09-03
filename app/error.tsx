@@ -19,6 +19,8 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
           <button
             className="btn btn-lg"
             onClick={() => {
+              // Redirect ONLY — never identity.clearPlayer(): a render crash is
+              // not evidence the session is invalid, and /play resumes it.
               window.location.href = "/play";
             }}
           >

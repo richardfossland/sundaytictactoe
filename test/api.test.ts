@@ -73,6 +73,58 @@ describe("api error mapping (via post/getJson)", () => {
     expect(err).toMatchObject({ status: 409, code: "stale" });
   });
 
+  it("maps a non-JSON error body to ApiError(status, 'non_json')", async () => {
+    // A Cloudflare edge page / WAF challenge: real HTTP status, HTML body.
+    // timedJson tolerates the unparseable body (→ {}), and because there is no
+    // `{ error }` envelope the client must NOT read the status as our verdict.
+    stubFetch(() =>
+      Promise.resolve({
+        ok: false,
+        status: 403,
+        json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+      }),
+    );
+    const err = await api.resume("KOLE-7F", { pin: "123456" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 403, code: "non_json" });
+  });
+
+  it("maps our own fail(404,'not_found') envelope to code 'not_found'", async () => {
+    stubFetch(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ error: "not_found" }),
+      }),
+    );
+    const err = await api.resume("KOLE-7F", { pin: "123456" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 404, code: "not_found" });
+  });
+
+  it("api.board surfaces our own error code, e.g. a 404 not_found", async () => {
+    stubFetch(() =>
+      Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ error: "not_found" }) }),
+    );
+    await expect(api.board("t1")).rejects.toMatchObject({ status: 404, code: "not_found" });
+  });
+
+  it("api.board does NOT report an edge HTML 404 as our own not_found", async () => {
+    // The distinction WaitingRoom's "Turneringen finnes ikke lenger" card (with
+    // its identity-clearing Logg ut button) hangs on: same status 404, but no
+    // envelope → the caller's tag, never "not_found".
+    stubFetch(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+      }),
+    );
+    const err = await api.board("t1").catch((e) => e);
+    expect(err).toMatchObject({ status: 404, code: "board_failed" });
+    expect(err.code).not.toBe("not_found");
+  });
+
   it("api.board maps a non-OK response to its caller code", async () => {
     stubFetch(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) }));
     await expect(api.board("t1")).rejects.toMatchObject({ status: 500, code: "board_failed" });

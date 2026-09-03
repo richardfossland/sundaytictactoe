@@ -3,12 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { no } from "@/lib/locale/no";
-import { api, ApiError } from "@/lib/client/api";
+import { api, ApiError, shouldClearSession } from "@/lib/client/api";
 import { identity, type StoredPlayer } from "@/lib/client/identity";
 import { isValidPin } from "@/lib/codes";
 import { WaitingRoom } from "./WaitingRoom";
 
 type Screen = "init" | "join" | "name" | "showCode" | "resume" | "playing";
+
+/** Say WHY the resume failed, for the failures that keep the session. The
+ * student can act on "no connection" but not on "noe gikk galt". */
+function resumeTrouble(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 0) {
+      return e.code === "timeout" ? no.player.resumeTimeout : no.player.resumeOffline;
+    }
+    if (e.status === 429) return no.player.resumeBusy;
+    // 5xx, or anything that wasn't our API talking (edge page / WAF / proxy).
+    if (e.status >= 500 || e.code === "non_json") return no.player.resumeServer;
+  }
+  return no.player.connection;
+}
 
 export default function Play() {
   const [screen, setScreen] = useState<Screen>("init");
@@ -19,11 +33,13 @@ export default function Play() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resumeError, setResumeError] = useState(false);
+  const [resumeMessage, setResumeMessage] = useState<string>(no.player.connection);
 
-  // Restore a stored session. A TRANSIENT failure (5xx/503, a Cloudflare 1102,
-  // network, rate-limit) must NOT wipe the session and kick the student to the
-  // join screen — keep it and let them retry. Only a genuine invalid/expired
-  // session (400/404) clears the stored identity.
+  // Restore a stored session. ONLY our own API saying invalid_code/not_found
+  // ends it (shouldClearSession). Everything else — 5xx/503, a Cloudflare 1102
+  // or any other HTML edge page (`non_json`), a WAF 403, network, rate-limit —
+  // keeps the session and offers a retry: a blip must never kick a student back
+  // to the join screen with "økten er utløpt".
   const attemptResume = useCallback(() => {
     const stored = identity.player();
     if (!stored) {
@@ -46,14 +62,14 @@ export default function Play() {
         setScreen("playing");
       })
       .catch((e) => {
-        const status = e instanceof ApiError ? e.status : 0;
-        if (status >= 500 || status === 0 || status === 429) {
-          setResumeError(true); // keep session; show retry
-        } else {
+        if (shouldClearSession(e)) {
           identity.clearPlayer();
           setError(no.player.sessionExpired);
           setScreen("join");
+          return;
         }
+        setResumeMessage(resumeTrouble(e)); // keep session; show retry + why
+        setResumeError(true);
       });
   }, []);
 
@@ -116,13 +132,10 @@ export default function Play() {
       setMe(stored);
       setScreen("playing");
     } catch (e) {
-      const status = e instanceof ApiError ? e.status : 0;
-      // A transient server/network blip must not read as a wrong code (dead-end).
-      setError(
-        status >= 500 || status === 0 || status === 429
-          ? no.player.connection
-          : no.player.invalidCode,
-      );
+      // Same rule as attemptResume: only our own invalid_code/not_found means
+      // "wrong code". A blip, a rate-limit or an edge error page must not read
+      // as a dead end — that sends the student hunting for a code that works.
+      setError(shouldClearSession(e) ? no.player.invalidCode : resumeTrouble(e));
       setBusy(false);
     }
   }
@@ -133,7 +146,7 @@ export default function Play() {
         {resumeError ? (
           <div className="card card-narrow stack text-center">
             <h2>{no.common.error}</h2>
-            <p className="muted">{no.player.connection}</p>
+            <p className="muted">{resumeMessage}</p>
             <button className="btn btn-primary btn-lg" onClick={attemptResume}>
               {no.common.retry}
             </button>

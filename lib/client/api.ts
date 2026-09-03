@@ -16,6 +16,45 @@ export class ApiError extends Error {
   }
 }
 
+/** Code used when a non-OK response did NOT come from our API — an HTML edge
+ * error page, a WAF challenge, a proxy 4xx, an empty body. The status of such a
+ * response says nothing about our data, so it must never end a session. */
+export const NON_JSON = "non_json";
+
+/** Our API always answers errors with the envelope `fail()` produces in
+ * lib/server/http.ts: JSON `{ error: "<code>" }` (+ optional extra fields).
+ * Returns that code, or null when the body isn't ours — which is how the client
+ * tells "our API said invalid_code" apart from "Cloudflare returned an HTML
+ * page with status 403". `timedJson` turns an unparseable body into `{}`, so a
+ * missing code covers both "not JSON" and "JSON, but not ours". */
+function apiErrorCode(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as { error?: unknown; code?: unknown };
+  const raw =
+    typeof d.error === "string" ? d.error : typeof d.code === "string" ? d.code : null;
+  return raw && raw.trim() ? raw : null;
+}
+
+/** Which errors are allowed to END a student's session (clear the stored
+ * identity and send them back to the join screen)?
+ *
+ * ONLY our own API, speaking in its own JSON envelope, saying the session
+ * cannot exist (see app/api/resume/route.ts):
+ *   - 404 `not_found`            → the tournament is gone
+ *   - 400/404 `invalid_code`     → that resume code is not a player in it
+ *
+ * Everything else keeps the identity, because none of it is evidence about the
+ * session: 0 (timeout/network), 401/403 (a WAF challenge or an edge that never
+ * reached us), 429 (a whole class resuming at once after a wifi blip), 5xx,
+ * `non_json` (an HTML error page — not our API at all) and any non-ApiError
+ * value. Wiping the resume code on those turns a three-second blip into a lost
+ * session, which is the bug this rule exists to prevent. */
+export function shouldClearSession(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.status !== 400 && err.status !== 404) return false;
+  return err.code === "invalid_code" || err.code === "not_found";
+}
+
 const DEFAULT_TIMEOUT = 8000;
 
 /** fetch + JSON parse under ONE hard timeout — a hung request must never freeze
@@ -58,15 +97,19 @@ async function post<T>(url: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!ok) {
-    const code = (data as { error?: string } | null)?.error ?? "error";
-    throw new ApiError(status, code, data);
+    // No envelope → this response is NOT our API's verdict (edge page, WAF,
+    // proxy). Say so explicitly rather than dressing it up as a generic "error"
+    // that callers would then read as a real rejection.
+    throw new ApiError(status, apiErrorCode(data) ?? NON_JSON, data);
   }
   return data as T;
 }
 
 async function getJson<T>(url: string, code: string): Promise<T> {
   const { ok, status, data } = await timedJson(url, { cache: "no-store" });
-  if (!ok) throw new ApiError(status, code, null);
+  // Prefer our own error code when the server sent one (e.g. 404 not_found);
+  // fall back to the caller's tag for anything that isn't our envelope.
+  if (!ok) throw new ApiError(status, apiErrorCode(data) ?? code, null);
   return data as T;
 }
 

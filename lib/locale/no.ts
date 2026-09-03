@@ -348,6 +348,20 @@ export const no = {
     illegalMove: "Ulovlig trekk",
     notYourTurn: "Det er ikke din tur",
     connection: "Tilkobling ustabil – synkroniserer …",
+    // The small persistent "reconnecting" badge (R7) — distinct copy from
+    // `connection` above, which is a one-shot toast on a failed move.
+    reconnecting: "Kobler til igjen …",
+    refreshNow: "Oppdater",
+    logOut: "Logg ut",
+    // Resume trouble that is NOT "wrong code" — the session is kept, so every
+    // one of these ends by saying the student can just try again.
+    resumeTimeout: "Serveren svarte ikke i tide. Økten din er trygg – prøv igjen.",
+    resumeOffline: "Ingen forbindelse. Sjekk nettet, og prøv igjen – økten din er trygg.",
+    resumeBusy: "Mange kobler til samtidig. Vent noen sekunder og prøv igjen.",
+    resumeServer: "Serveren svarer ikke akkurat nå. Økten din er trygg – prøv igjen.",
+    tournamentGone: "Turneringen finnes ikke lenger",
+    tournamentGoneBody:
+      "Arrangøren har avsluttet eller slettet den. Logg ut, så kan du bli med i en ny.",
     premoveSet: "Forhåndstrekk klart – spilles automatisk når det blir din tur (trykk et tomt felt for å avbryte)",
     premoveCancelled: "Forhåndstrekket ble forkastet",
     gameLoadFailed: "Fant ikke partiet. Prøv igjen eller gå tilbake.",

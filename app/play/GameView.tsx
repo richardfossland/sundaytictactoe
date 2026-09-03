@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameDetail } from "@/lib/dto";
 import type { GameStatus, Turn } from "@/lib/types";
-import { api, ApiError } from "@/lib/client/api";
+import { api, ApiError, NON_JSON } from "@/lib/client/api";
 import { applyMove } from "@/lib/ttt/validateMove";
 import { variantById } from "@/lib/ttt/variants";
 import { findWinLine } from "@/lib/ttt/win";
@@ -128,6 +128,11 @@ export function GameView({
   const [acting, setActing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState(false);
+  // Consecutive failed background syncs (poll / resync / channel-drop / rollback
+  // resync) — NOT the mount load above, which has its own loadError gate. Drives
+  // the fixed "reconnecting" badge (R7) so a run of quiet `load()` failures is
+  // visible instead of the board just appearing to freeze.
+  const [syncFailures, setSyncFailures] = useState(0);
   const [incomingDraw, setIncomingDraw] = useState(false);
   const [drawSent, setDrawSent] = useState(false);
   // Live move list. Rebuilt authoritatively from the pgn on load()/end, appended
@@ -191,6 +196,17 @@ export function GameView({
     }
   }, [gameId, me.playerId]);
 
+  // Fire-and-forget wrapper for every background resync site below: never
+  // throws (so callers can call it bare in a setInterval/listener), and counts
+  // consecutive failures so the UI can show a "reconnecting" badge instead of
+  // silently going stale. A success — including one that follows a string of
+  // failures, e.g. after a channel drop — resets the counter immediately.
+  const safeLoad = useCallback(() => {
+    return load()
+      .then(() => setSyncFailures(0))
+      .catch(() => setSyncFailures((n) => n + 1));
+  }, [load]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
@@ -205,7 +221,7 @@ export function GameView({
   // focus or the network returns (recovers any missed broadcast).
   useEffect(() => {
     const resync = () => {
-      if (document.visibilityState === "visible") load().catch(() => {});
+      if (document.visibilityState === "visible") safeLoad();
     };
     window.addEventListener("focus", resync);
     window.addEventListener("online", resync);
@@ -215,7 +231,7 @@ export function GameView({
       window.removeEventListener("online", resync);
       document.removeEventListener("visibilitychange", resync);
     };
-  }, [load]);
+  }, [safeLoad]);
 
   // Poll backstop: realtime broadcasts are best-effort, so re-sync on a timer
   // whenever the game is live — even while `pending` is set. Guarantees the board
@@ -223,10 +239,10 @@ export function GameView({
   useEffect(() => {
     if (status !== "live" || !tabActive) return; // passive tab: don't poll
     const id = setInterval(() => {
-      if (document.visibilityState === "visible") load().catch(() => {});
+      if (document.visibilityState === "visible") safeLoad();
     }, 3000);
     return () => clearInterval(id);
-  }, [status, load, tabActive]);
+  }, [status, safeLoad, tabActive]);
 
   // Pending watchdog: an absolute ceiling so the optimistic-move lock can NEVER
   // freeze the board permanently.
@@ -234,10 +250,10 @@ export function GameView({
     if (!pending) return;
     const t = setTimeout(() => {
       setPending(false);
-      load().catch(() => {});
+      safeLoad();
     }, PENDING_CEILING_MS);
     return () => clearTimeout(t);
-  }, [pending, load]);
+  }, [pending, safeLoad]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -253,7 +269,7 @@ export function GameView({
       .then(() => onOk?.())
       .catch(() => {
         flash(no.common.error);
-        load().catch(() => {});
+        safeLoad();
       })
       .finally(() => setActing(false));
   };
@@ -330,7 +346,7 @@ export function GameView({
       }
     },
     (s) => {
-      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") load().catch(() => {});
+      if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") safeLoad();
     },
   );
 
@@ -368,17 +384,22 @@ export function GameView({
         const code = e instanceof ApiError ? e.code : "";
         const httpStatus = e instanceof ApiError ? e.status : 0;
         if (code === "not_your_turn") flash(no.player.notYourTurn);
-        else if (code === "timeout" || code === "network") flash(no.player.connection);
-        else if (httpStatus === 400) flash(no.player.illegalMove);
+        else if (code === "timeout" || code === "network" || code === NON_JSON) {
+          // Request hung/dropped — or the reply was never our API's (an HTML
+          // edge page / WAF challenge / proxy). A 400 from one of those is not
+          // a ruling on the move, so it must not reach the "illegal move"
+          // branch below and accuse the student.
+          flash(no.player.connection);
+        } else if (httpStatus === 400) flash(no.player.illegalMove);
         else if (httpStatus >= 500 || httpStatus === 0) flash(no.player.connection);
         else flash(no.common.error);
         // Always re-sync to authoritative state so the board can't get stuck.
-        load().catch(() => {});
+        safeLoad();
       } finally {
         setPending(false);
       }
     },
-    [appendSan, fen, gameId, isMyTurn, load, me.playerId, me.resumeCode, pending, V],
+    [appendSan, fen, gameId, isMyTurn, safeLoad, me.playerId, me.resumeCode, pending, V],
   );
 
   // Another tab on this device took over this player's session.
@@ -454,6 +475,34 @@ export function GameView({
   return (
     <main className="center-screen is-game">
       {iWon && <Confetti count={120} />}
+      {syncFailures >= 1 && (
+        // Fixed-position, out of document flow: a background sync hiccup must
+        // never move the board or block a drag-drop in progress. Escalates to
+        // an explicit retry only once it's been failing for a while (>=3) —
+        // one blip shouldn't invite a button-mash.
+        <div
+          className="banner banner-wait"
+          style={{
+            position: "fixed",
+            top: 16,
+            left: 20,
+            zIndex: 40,
+            padding: "6px 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          {no.player.reconnecting}
+          {syncFailures >= 3 && (
+            <button className="btn btn-ghost" style={{ padding: "2px 10px" }} onClick={() => safeLoad()}>
+              {no.player.refreshNow}
+            </button>
+          )}
+        </div>
+      )}
       <div className="game-grid">
         {/* opponent — left on wide, top on narrow */}
         <div className="game-side panel-opp">
