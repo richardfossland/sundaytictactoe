@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useBoardState } from "@/lib/client/useBoardState";
+import { identity } from "@/lib/client/identity";
 import { no } from "@/lib/locale/no";
+import { DiagnosticsModal } from "./DiagnosticsModal";
 import { LobbyView } from "./LobbyView";
 import { LeagueView } from "./LeagueView";
 import { BracketView } from "./BracketView";
@@ -12,6 +14,15 @@ import { LiveGamesView } from "./LiveGamesView";
 export function BoardClient({ tournamentId }: { tournamentId: string }) {
   const { state, error, refresh } = useBoardState(tournamentId);
   const [mode, setMode] = useState<"board" | "live">("board");
+  // T5 diagnostics: host-code-gated, so the button only appears on the device
+  // that actually created this tournament (the code lives in its localStorage).
+  const [hostCode, setHostCode] = useState<string | null>(null);
+  const [showDiag, setShowDiag] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHostCode(identity.hostCode(tournamentId));
+  }, [tournamentId]);
 
   // Only blank the projector when we have NOTHING to show. A transient fetch
   // error after we already have state must not wipe the live board — keep the
@@ -69,28 +80,52 @@ export function BoardClient({ tournamentId }: { tournamentId: string }) {
           {no.common.loading}
         </div>
       )}
-      {liveable && (
+      {/* One fixed toolbar, not two — the live/board toggle only exists once a
+          round is running, the diagnostics button only on the device that holds
+          the host code, and neither must leave an empty fixed box behind. */}
+      {(liveable || hostCode) && (
         <div
           className="row"
           style={{ position: "fixed", top: 16, right: 20, zIndex: 40, gap: 4 }}
         >
-          <button
-            className={`btn ${mode === "board" ? "btn-primary" : "btn-ghost"}`}
-            style={{ padding: "8px 14px" }}
-            onClick={() => setMode("board")}
-          >
-            {no.host.boardToggle}
-          </button>
-          <button
-            className={`btn ${mode === "live" ? "btn-primary" : "btn-ghost"}`}
-            style={{ padding: "8px 14px" }}
-            onClick={() => setMode("live")}
-          >
-            ● {no.host.liveToggle}
-          </button>
+          {liveable && (
+            <>
+              <button
+                className={`btn ${mode === "board" ? "btn-primary" : "btn-ghost"}`}
+                style={{ padding: "8px 14px" }}
+                onClick={() => setMode("board")}
+              >
+                {no.host.boardToggle}
+              </button>
+              <button
+                className={`btn ${mode === "live" ? "btn-primary" : "btn-ghost"}`}
+                style={{ padding: "8px 14px" }}
+                onClick={() => setMode("live")}
+              >
+                ● {no.host.liveToggle}
+              </button>
+            </>
+          )}
+          {hostCode && (
+            <button
+              className="btn btn-ghost"
+              style={{ padding: "8px 14px" }}
+              onClick={() => setShowDiag(true)}
+            >
+              🩺 {no.diag.open}
+            </button>
+          )}
         </div>
       )}
       {view}
+      {showDiag && hostCode && (
+        <DiagnosticsModal
+          tournamentId={tournamentId}
+          hostCode={hostCode}
+          state={state}
+          onClose={() => setShowDiag(false)}
+        />
+      )}
     </>
   );
 }

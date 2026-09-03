@@ -3,7 +3,7 @@
 // Thin typed fetch wrappers around the server API. All mutations go through
 // these; the browser never touches the database directly.
 
-import type { BoardState, GameDetail } from "@/lib/dto";
+import type { BoardState, DiagnosticsResult, GameDetail } from "@/lib/dto";
 import type { GameStatus, PlayerStatus, Turn } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -277,6 +277,12 @@ export const api = {
       `/api/tournament/${tournamentId}/codes`,
       { hostCode },
     ),
+
+  // Teacher's readout of the client beacon (T5). Same host-code gate as codes.
+  diagnostics: (tournamentId: string, hostCode: string) =>
+    post<DiagnosticsResult>(`/api/tournament/${tournamentId}/diagnostics`, {
+      hostCode,
+    }),
 
   kick: (tournamentId: string, hostCode: string, playerId: string) =>
     post<{ ok: boolean }>("/api/lobby/kick", { tournamentId, hostCode, playerId }),

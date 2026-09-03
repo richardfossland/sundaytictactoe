@@ -7,6 +7,7 @@ import { usePresence } from "@/lib/client/usePresence";
 import { channels } from "@/lib/realtime";
 import { api } from "@/lib/client/api";
 import { identity, type StoredPlayer } from "@/lib/client/identity";
+import { report } from "@/lib/client/telemetry";
 import { initials } from "@/lib/client/Confetti";
 import { PredictPanel } from "@/lib/client/PredictPanel";
 import { BracketBoard } from "@/lib/client/BracketBoard";
@@ -92,7 +93,9 @@ export function WaitingRoom({
   onLeave,
 }: {
   me: StoredPlayer;
-  onLeave: () => void;
+  /** `reason` (T5) only labels the telemetry event the parent records before it
+   * wipes the session — the leave behaviour is identical either way. */
+  onLeave: (reason?: "logout" | "tournament_gone") => void;
 }) {
   const [showCode, setShowCode] = useState(false);
   const [rejoining, setRejoining] = useState(false);
@@ -122,6 +125,7 @@ export function WaitingRoom({
   // drop back to the waiting view instead of rendering a board that can't load.
   useEffect(() => {
     if (state && activeGameId && !state.games.some((g) => g.id === activeGameId)) {
+      report("game_vanished", { gameId: activeGameId, status: state.tournament.status });
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveGameId(null);
     }
@@ -207,8 +211,12 @@ export function WaitingRoom({
             className="btn btn-primary btn-lg"
             style={{ marginTop: 6 }}
             onClick={() => {
+              // onLeave FIRST: it records the telemetry event, and that reads
+              // the stored identity for the (opaque) ids — clearing first would
+              // make every kick anonymous. onLeave clears the session itself;
+              // the call below is the pre-existing belt-and-braces.
+              onLeave("tournament_gone");
               identity.clearPlayer();
-              onLeave();
             }}
           >
             {no.player.logOut}
@@ -357,8 +365,8 @@ export function WaitingRoom({
           className="btn btn-ghost"
           style={{ marginTop: 8 }}
           onClick={() => {
+            onLeave(); // first — see the tournament-gone button above
             identity.clearPlayer();
-            onLeave();
           }}
         >
           {no.player.logOut}
