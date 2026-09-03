@@ -192,6 +192,7 @@ e2e/
                        · waitForBoard (for tabs openAs did not open)
   pages/board.ts       BoardPage — clickCell/markAt/marks/moves/turnBanner ·
                        boardBox/scrollY/turnSlotHeight/movelistPinned/resignButton
+                       · watchMark (records a cell's data-mark over time)
   helpers/cls.ts       layout-shift accumulator (installCls on a page OR context)
   helpers/identity.ts  seedPlayer / seedHostCode / readIdentity (`ttt:player`,
                        `ttt:host:<id>`)
@@ -215,6 +216,15 @@ IP and in CI every spec shares the runner's address.
 tap carries `hadRecentInput`, and the Web Vitals definition excludes it. The move
 you did *not* make has no such excuse — the incoming update is what used to shove
 the board around.
+
+**A state that only exists for milliseconds is WATCHED, not sampled.** An
+optimistic move made into a dead network is rendered and rolled back before
+`fetch` even reports the failure, so `expect.poll(markAt)` on that window is a
+coin flip — it passed one CI run and failed the next, on both projects.
+`BoardPage.watchMark` installs a MutationObserver before the click and records
+the whole sequence (`["", "x", ""]`), which is a stronger claim than either
+sample. Sampling stays correct where the state STANDS: `server-errors.spec.ts`
+hangs the route, so the optimistic mark is there for the full 8 s deadline.
 
 **Both halves of L1, always.** `MoveList` keeps the newest move in view by
 setting its **own** `scrollTop`; the bug it replaced used `scrollIntoView()`,

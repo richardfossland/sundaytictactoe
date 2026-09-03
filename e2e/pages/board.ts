@@ -49,6 +49,37 @@ export class BoardPage {
     return value === "x" || value === "o" ? value : null;
   }
 
+  /**
+   * Record every value `data-mark` takes on cell `i` from now on, in order.
+   *
+   * `markAt()` SAMPLES; this WATCHES, and the difference matters exactly once:
+   * a move made into a dead network is rendered optimistically and taken back
+   * again within a few milliseconds — `fetch` rejects with
+   * ERR_INTERNET_DISCONNECTED long before the 3 s poll, let alone before
+   * Playwright can round-trip a query — so `expect.poll(markAt)` is a coin
+   * flip there. (Proved: it passed one CI run and failed the next, on both
+   * projects.) A MutationObserver installed BEFORE the click sees the whole
+   * sequence, so "rendered, then rolled back" becomes assertable rather than
+   * lucky. MnkBoard gives each cell a stable `key={i}`, so React MUTATES the
+   * attribute on the same node instead of replacing it — which is what makes
+   * an attribute observer the right instrument.
+   *
+   * Returns a reader; the array keeps growing behind it, so read it before the
+   * next move rather than at the end of the test. Consecutive duplicates are
+   * collapsed: a re-render that writes the same value is not an event.
+   */
+  async watchMark(i: Cell): Promise<() => Promise<string[]>> {
+    const handle = await this.cell(i).evaluateHandle((el) => {
+      const seen: string[] = [el.getAttribute("data-mark") ?? ""];
+      new MutationObserver(() => {
+        const value = el.getAttribute("data-mark") ?? "";
+        if (value !== seen[seen.length - 1]) seen.push(value);
+      }).observe(el, { attributes: true, attributeFilter: ["data-mark"] });
+      return seen;
+    });
+    return () => handle.jsonValue();
+  }
+
   /** All cells' marks, board order — handy for a whole-position assertion. */
   async marks(): Promise<(Mark | null)[]> {
     const values = await this.shell()

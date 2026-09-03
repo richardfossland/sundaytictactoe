@@ -117,24 +117,33 @@ test("a move posted into a dead network rolls back and releases the lock", async
 
     await xCtx.setOffline(true);
 
-    // The optimistic render happens in the click handler, before any network
-    // call resolves — the student sees their mark immediately, as designed.
-    await x.clickCell(0);
-    await expect.poll(() => x.markAt(0), { timeout: 2_000 }).toBe("x");
+    // WATCHED, not sampled. The optimistic render happens in the click handler,
+    // before any network call resolves — but with the network gone the POST
+    // rejects immediately, so the mark is placed and taken back inside a few
+    // milliseconds. `expect.poll(markAt)` on that window is a coin flip; a
+    // MutationObserver installed before the click records the whole sequence.
+    // (`server-errors.spec.ts` asserts the optimistic render by sampling, and
+    // can: there the route HANGS, so the mark stands for the full 8 s deadline.)
+    const cell0 = await x.watchMark(0);
 
-    // …and then it is taken back, with a word about why. 9 s is inside the 11 s
-    // pending ceiling on purpose: the rollback must come from the failed POST
-    // (8 s deadline at the very worst), never from the watchdog.
+    await x.clickCell(0);
+
+    // A word about why. 9 s is inside the 11 s pending ceiling on purpose: the
+    // rollback must come from the failed POST (8 s deadline at the very worst),
+    // never from the watchdog.
     await expect(x.toast(), "no toast explained the failed move").toBeVisible({
       timeout: 9_000,
     });
     await expect(x.toast()).toContainText(no.player.connection);
+
+    // Placed, then taken back — both halves, in that order, and nothing else.
     await expect
-      .poll(() => x.markAt(0), {
+      .poll(() => cell0(), {
         timeout: 9_000,
-        message: "the board never rolled back to the confirmed position",
+        message:
+          "the move was never rendered optimistically, or was never rolled back",
       })
-      .toBeNull();
+      .toEqual(["", "x", ""]);
 
     // `pending` is what would freeze the board, and the resign button is
     // `disabled={pending || …}` — so an enabled button IS a released lock.
@@ -145,11 +154,8 @@ test("a move posted into a dead network rolls back and releases the lock", async
     ).toBeEnabled({ timeout: 11_000 });
 
     // …and a SECOND tap is accepted rather than swallowed. `tryMove` returns
-    // immediately while `pending` is set, so it would produce no toast at all —
-    // a fresh toast is therefore proof that the attempt was taken. (The
-    // optimistic render itself is not assertable here: offline, the POST rejects
-    // in well under one poll interval, so the mark is on cell 0 and gone again
-    // before any observer could see it.)
+    // immediately while `pending` is set, so a swallowed tap would produce no
+    // toast and no render at all. Both say the attempt was taken.
     await expect(x.toast(), "the 2.2 s toast never cleared").toHaveCount(0, {
       timeout: 6_000,
     });
@@ -158,6 +164,12 @@ test("a move posted into a dead network rolls back and releases the lock", async
       x.toast(),
       "a second move attempt was swallowed — the pending lock is still on",
     ).toBeVisible({ timeout: 9_000 });
+    await expect
+      .poll(() => cell0(), {
+        timeout: 9_000,
+        message: "the second tap never reached the board at all",
+      })
+      .toEqual(["", "x", "", "x", ""]);
 
     // ---- back online: the move goes through and both boards agree ----
     await xCtx.setOffline(false);
