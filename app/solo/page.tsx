@@ -198,7 +198,7 @@ export default function Solo() {
     : null;
 
   return (
-    <main className="center-screen">
+    <main className="center-screen is-game">
       {outcome === "win" && <Confetti count={120} />}
       <div className="stack" style={{ alignItems: "center", width: "100%", maxWidth: 600, gap: 16 }}>
         <div className="spread" style={{ width: "min(92vw,560px)" }}>

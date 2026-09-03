@@ -506,6 +506,15 @@ export function GameView({
           )}
         </div>
       )}
+      {/* L3: a true toast — fixed/out of flow (see .toast in globals.css) so a
+          transient error message can never change .center-screen's height and
+          re-centre (or on /solo, jump) the board underneath it. Auto-clears
+          after 2.2s (see `flash`). */}
+      {toast && (
+        <div className="banner banner-error toast" data-testid="toast" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
       <div className="game-grid">
         {/* opponent — left on wide, top on narrow */}
         <div className="game-side panel-opp">
@@ -574,13 +583,19 @@ export function GameView({
             <ReactionOverlay ref={reactionRef} />
           </div>
 
-          {reactionsEnabled && !ended && (
-            <ReactionBar
-              onSend={(emoji) => {
-                reactionRef.current?.add(emoji); // self-broadcast off → show mine locally
-                sendOnGame("reaction", { emoji, by: me.playerId });
-              }}
-            />
+          {/* L3: kept mounted (visibility, not unmount) once reactions are
+              enabled for this round, so its removal at game end — which sits
+              below the board but above the result overlay's fade-in — can't
+              read as a flash beneath the overlay. */}
+          {reactionsEnabled && (
+            <div style={ended ? { visibility: "hidden" } : undefined}>
+              <ReactionBar
+                onSend={(emoji) => {
+                  reactionRef.current?.add(emoji); // self-broadcast off → show mine locally
+                  sendOnGame("reaction", { emoji, by: me.playerId });
+                }}
+              />
+            </div>
           )}
 
           {/* Always mounted (L2): visibility:hidden at game end instead of
@@ -610,45 +625,18 @@ export function GameView({
             </button>
           </div>
 
-          {drawSent && !ended && (
-            <div className="banner banner-wait" style={{ width: "100%" }} role="status" aria-live="polite">
-              ½ {no.player.drawSent}
-            </div>
-          )}
-
-          {incomingDraw && !ended && (
-            <div className="card stack" style={{ padding: 16, width: "100%" }}>
-              <p>{no.player.drawOfferedByOpponent}</p>
-              <div className="row">
-                <button
-                  className="btn btn-primary grow"
-                  disabled={acting}
-                  onClick={() =>
-                    runMeta(
-                      api.draw(gameId, me.playerId, me.resumeCode, "accept"),
-                      () => setIncomingDraw(false),
-                    )
-                  }
-                >
-                  {no.player.accept}
-                </button>
-                <button
-                  className="btn grow"
-                  disabled={acting}
-                  onClick={() =>
-                    runMeta(
-                      api.draw(gameId, me.playerId, me.resumeCode, "decline"),
-                      () => setIncomingDraw(false),
-                    )
-                  }
-                >
-                  {no.player.decline}
-                </button>
+          {/* L3: the "draw offer sent" banner gets its own always-mounted
+              fixed-height slot below the action row (see .notice-slot in
+              globals.css) — visibility:hidden (never unmounted) once the game
+              ends, same as the row above, so the offer going out or being
+              declined never changes anything else's height mid-game. */}
+          <div className="notice-slot" style={ended ? { visibility: "hidden" } : undefined}>
+            {drawSent && (
+              <div className="banner banner-wait" style={{ width: "100%" }} role="status" aria-live="polite">
+                <span className="banner-line">½ {no.player.drawSent}</span>
               </div>
-            </div>
-          )}
-
-          {toast && <div className="banner banner-error" style={{ width: "100%" }}>{toast}</div>}
+            )}
+          </div>
 
           {/* Always mounted (L2) — MoveList already renders a "–" placeholder
               for an empty list, and .movelist now has a fixed height, so it's
@@ -700,6 +688,31 @@ export function GameView({
             runMeta(api.resign(gameId, me.playerId, me.resumeCode));
           }}
           onCancel={() => setConfirmResign(false)}
+        />
+      )}
+
+      {/* L3: was an in-flow card below the board (grew the layout by a whole
+          card whenever an offer arrived, sliding the board on a top-aligned
+          screen). A modal dialog — same one used for resign — moves it out of
+          flow entirely; accept/decline are wired to the same handlers as
+          before. */}
+      {incomingDraw && !ended && (
+        <ConfirmDialog
+          message={no.player.drawOfferedByOpponent}
+          confirmLabel={no.player.accept}
+          cancelLabel={no.player.decline}
+          onConfirm={() =>
+            runMeta(
+              api.draw(gameId, me.playerId, me.resumeCode, "accept"),
+              () => setIncomingDraw(false),
+            )
+          }
+          onCancel={() =>
+            runMeta(
+              api.draw(gameId, me.playerId, me.resumeCode, "decline"),
+              () => setIncomingDraw(false),
+            )
+          }
         />
       )}
 
