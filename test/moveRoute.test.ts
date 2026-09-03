@@ -47,6 +47,11 @@ vi.mock("@/lib/server/gameEvents", () => ({
 import { POST } from "@/app/api/move/route";
 
 const START = ".........";
+// A valid-shaped id for the request body — the route's isUuid guard (R1b)
+// checks this BEFORE the (mocked) getGame is ever called, so it must look
+// like a real UUID even though the mocked store keys off makeGame()'s own
+// "g1" id for its return value and every downstream assertion.
+const GAME_ID = "11111111-1111-4111-8111-111111111111";
 
 function makeGame(over: Partial<Game> = {}): Game {
   return {
@@ -100,16 +105,27 @@ beforeEach(() => {
 });
 
 describe("POST /api/move", () => {
+  // R1b: a malformed gameId (bot probe, stale link) is a bad request, not an
+  // outage — it must never reach getGame/Postgres (22P02 → false 503).
+  it("400 on a malformed (non-UUID) gameId, without ever calling getGame", async () => {
+    const res = await POST(
+      req({ gameId: "probe", cell: 4, playerId: "white", resumeCode: "AAAA-AA" }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("bad_request");
+    expect(getGame).not.toHaveBeenCalled();
+  });
+
   it("401 when the resume code does not authenticate", async () => {
     authPlayer.mockResolvedValue(null);
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "white", resumeCode: "x" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "white", resumeCode: "x" }));
     expect(res.status).toBe(401);
   });
 
   it("403 when it is not the mover's turn", async () => {
     authPlayer.mockResolvedValue(makePlayer("black"));
     getGame.mockResolvedValue(makeGame({ turn: "w" })); // white to move, black asks
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "black", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "black", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe("not_your_turn");
   });
@@ -118,7 +134,7 @@ describe("POST /api/move", () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     // 2 marks → white to move; cell 0 is occupied → illegal.
     getGame.mockResolvedValue(makeGame({ fen: "xo......." }));
-    const res = await POST(req({ gameId: "g1", cell: 0, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 0, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(400);
     expect(applyMoveRpc).not.toHaveBeenCalled();
   });
@@ -126,7 +142,7 @@ describe("POST /api/move", () => {
   it("returns a structured 503 (never throws) when an internal call fails", async () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getGame.mockRejectedValue(new Error("db down"));
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe("server_error");
   });
@@ -134,7 +150,7 @@ describe("POST /api/move", () => {
   it("applies a legal move atomically and broadcasts", async () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getGame.mockResolvedValue(makeGame());
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.turn).toBe("b");
@@ -169,7 +185,7 @@ describe("POST /api/move", () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getGame.mockResolvedValue(makeGame());
     applyMoveRpc.mockResolvedValue({ ok: false, conflict: "stale" });
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("stale");
   });
@@ -179,7 +195,7 @@ describe("POST /api/move", () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getGame.mockResolvedValue(makeGame({ fen: "xx.oo...." }));
     applyMoveRpc.mockResolvedValue({ ok: true, ply: 5, status: "white_win" });
-    const res = await POST(req({ gameId: "g1", cell: 2, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 2, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.status).toBe("white_win");
@@ -197,7 +213,7 @@ describe("POST /api/move", () => {
   it("404 when the game does not exist", async () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getGame.mockResolvedValue(null);
-    const res = await POST(req({ gameId: "g1", cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 4, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(404);
   });
 
@@ -207,7 +223,7 @@ describe("POST /api/move", () => {
     authPlayer.mockResolvedValue(makePlayer("white"));
     getTournament.mockResolvedValue({ id: "t", config: { variant: "4x4" } });
     getGame.mockResolvedValue(makeGame({ fen: "xxx.ooo........." }));
-    const res = await POST(req({ gameId: "g1", cell: 3, playerId: "white", resumeCode: "AAAA-AA" }));
+    const res = await POST(req({ gameId: GAME_ID, cell: 3, playerId: "white", resumeCode: "AAAA-AA" }));
     expect(res.status).toBe(200);
     expect(applyMoveRpc.mock.calls[0][0]).toMatchObject({ newStatus: "white_win" });
   });

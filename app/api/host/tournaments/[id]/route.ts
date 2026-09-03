@@ -1,6 +1,7 @@
 import { requireHost, hostAuthFail } from "@/lib/server/auth";
 import { deleteTournamentOwned } from "@/lib/server/store";
 import { fail, ok } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // DELETE /api/host/tournaments/[id] — owner-gated delete. requireHost() enforces
 // 401 (not signed in) / 403 (not allow-listed); deleteTournamentOwned() then
@@ -14,6 +15,10 @@ export async function DELETE(
   try {
     const host = await requireHost();
     const { id } = await ctx.params;
+    // Malformed id is a client error, not an outage: a non-UUID `.eq("id", id)`
+    // throws 22P02 in Postgres. Answer the same not_found a real-but-unowned
+    // id gets, rather than letting the query throw into a false 503.
+    if (!isUuid(id)) return fail(404, "not_found");
     const deleted = await deleteTournamentOwned(id, host.id);
     if (!deleted) return fail(404, "not_found");
     return ok({ ok: true });

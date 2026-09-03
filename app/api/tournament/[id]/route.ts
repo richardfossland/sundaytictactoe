@@ -7,6 +7,7 @@ import {
 } from "@/lib/server/store";
 import { computeScores, computeStandings } from "@/lib/tournament/score";
 import { fail, ok } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 import {
   toBoardTournament,
   toPublicGame,
@@ -32,6 +33,10 @@ async function handleGet(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
+  // A malformed id (bot probes, stale links) is a client error, not an outage:
+  // Postgres throws 22P02 on a non-UUID `.eq("id", id)`, and that must not
+  // surface as a 503 — "no such tournament" is the truthful, cheap answer.
+  if (!isUuid(id)) return fail(404, "not_found");
 
   const t = await getTournament(id);
   if (!t) return fail(404, "not_found");
