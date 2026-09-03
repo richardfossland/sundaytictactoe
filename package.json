@@ -11,6 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm test",
+    "probe": "node scripts/probe.mjs",
     "smoke:live": "node scripts/smoke-live.mjs",
     "smoke:features": "node scripts/smoke-features.mjs"
   },
