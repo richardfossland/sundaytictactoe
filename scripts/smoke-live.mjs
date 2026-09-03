@@ -1,71 +1,80 @@
-// Production smoke test against the live Worker + cloud Supabase.
-// HTTP goes through curl with --resolve (local DNS may still cache NXDOMAIN);
-// realtime subscribes to the cloud Supabase project directly.
+// Production smoke test against the live Worker + cloud Supabase, via the
+// PUBLIC flow only: create → join ×2 → round/start → find the live game →
+// moves. `/api/dev/quickmatch` is a dev-only test seam that 404s in a
+// production build, so it cannot be used here (see scripts/smoke.mjs, which
+// runs against a local dev server and can use it).
 //
 //   node scripts/smoke-live.mjs
 
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { createClient } from "@supabase/supabase-js";
-
-const HOST = "chess.sundaysuite.app";
-const IP = process.env.IP || "104.21.48.174";
-const env = Object.fromEntries(
-  readFileSync("/tmp/sjakk.env", "utf8")
-    .trim()
-    .split("\n")
-    .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
-);
+import { BASE, fetchJson } from "./lib/live.mjs";
 
 let pass = 0,
   fail = 0;
 const check = (n, c, x = "") => (c ? (pass++, console.log("  ✓ " + n)) : (fail++, console.log("  ✗ " + n + " " + x)));
 
-function curl(method, path, body) {
-  const args = ["-s", "--resolve", `${HOST}:443:${IP}`, "-X", method, `https://${HOST}${path}`];
-  if (body) args.push("-H", "content-type: application/json", "-d", JSON.stringify(body));
-  const out = execFileSync("curl", args, { encoding: "utf8" });
-  try {
-    return JSON.parse(out);
-  } catch {
-    return { _raw: out };
-  }
-}
-const move = (g, p, from, to) =>
-  curl("POST", "/api/move", { gameId: g, from, to, playerId: p.playerId, resumeCode: p.resumeCode });
+const move = (gameId, player, cell) =>
+  fetchJson("/api/move", {
+    method: "POST",
+    body: JSON.stringify({ gameId, cell, playerId: player.playerId, resumeCode: player.resumeCode }),
+  });
 
 async function main() {
-  console.log(`SundaySjakk LIVE smoke — https://${HOST}\n`);
+  console.log(`SundayTicTacToe LIVE smoke — ${BASE}\n`);
 
-  const qm = curl("POST", "/api/dev/quickmatch", { white: "Ada", black: "Bo" });
-  check("quickmatch on cloud DB", !!qm.gameId, JSON.stringify(qm));
-  if (!qm.gameId) return done();
-  const { gameId, white, black } = qm;
+  const created = await fetchJson("/api/tournament", {
+    method: "POST",
+    body: JSON.stringify({ title: "LiveSmoke" }),
+  });
+  check("tournament created", created.status === 200 && !!created.json.id, JSON.stringify(created.json));
+  if (!created.json.id) return done();
+  const { id, joinPin, hostCode } = created.json;
 
-  // Realtime subscription to the cloud project.
-  const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const events = [];
-  const ch = sb.channel(`game:${gameId}`, { config: { broadcast: { self: false } } });
-  ch.on("broadcast", { event: "*" }, (m) => events.push(m.event));
-  await new Promise((r) => ch.subscribe((s) => s === "SUBSCRIBED" && r()));
+  const j1 = await fetchJson("/api/join", { method: "POST", body: JSON.stringify({ pin: joinPin, displayName: "Ada" }) });
+  const j2 = await fetchJson("/api/join", { method: "POST", body: JSON.stringify({ pin: joinPin, displayName: "Bo" }) });
+  check(
+    "both players joined",
+    !!j1.json.playerId && !!j2.json.playerId,
+    JSON.stringify({ j1: j1.json, j2: j2.json }),
+  );
+  if (!j1.json.playerId || !j2.json.playerId) return done();
 
-  check("illegal move rejected", move(gameId, white, "e2", "e6").error === "illegal");
-  check("out-of-turn rejected", move(gameId, black, "e7", "e5").error === "not_your_turn");
+  const started = await fetchJson("/api/round/start", {
+    method: "POST",
+    body: JSON.stringify({ tournamentId: id, hostCode }),
+  });
+  check("round started", started.status === 200 && started.json.status === "league", JSON.stringify(started.json));
 
-  check("white f3", move(gameId, white, "f2", "f3").turn === "b");
-  check("black e5", move(gameId, black, "e7", "e5").turn === "w");
-  check("white g4", move(gameId, white, "g2", "g4").turn === "b");
-  check("black Qh4# → black_win", move(gameId, black, "d8", "h4").status === "black_win");
+  const board1 = await fetchJson(`/api/tournament/${id}`);
+  const g = board1.json.games?.find((x) => x.status === "live" && x.blackPlayerId);
+  check("live game found on the board", Boolean(g), JSON.stringify(board1.json.games));
+  if (!g) return done();
 
-  const detail = curl("GET", `/api/game/${gameId}`);
-  check("reconnect read shows black_win", detail.status === "black_win");
+  const byId = { [j1.json.playerId]: j1.json, [j2.json.playerId]: j2.json };
+  const white = byId[g.whitePlayerId];
+  const black = byId[g.blackPlayerId];
 
-  await new Promise((r) => setTimeout(r, 800));
-  check("cloud realtime delivered position broadcasts", events.filter((e) => e === "position").length >= 1, JSON.stringify(events));
+  // Row 0 (cells 0,1,2) for X: white takes 0, 1, 2; black takes 3, 4 in between.
+  const m1 = await move(g.id, white, 0);
+  check("white plays cell 0, turn→black", m1.status === 200 && m1.json.turn === "b", JSON.stringify(m1.json));
+  const m2 = await move(g.id, black, 3);
+  check("black plays cell 3, turn→white", m2.status === 200 && m2.json.turn === "w", JSON.stringify(m2.json));
+  const m3 = await move(g.id, white, 1);
+  check("white plays cell 1, turn→black", m3.status === 200 && m3.json.turn === "b", JSON.stringify(m3.json));
+  const m4 = await move(g.id, black, 4);
+  check("black plays cell 4, turn→white", m4.status === 200 && m4.json.turn === "w", JSON.stringify(m4.json));
+  const m5 = await move(g.id, white, 2);
+  check("white plays cell 2 → white_win (top row)", m5.status === 200 && m5.json.status === "white_win", JSON.stringify(m5.json));
 
-  await sb.removeChannel(ch);
+  const board2 = await fetchJson(`/api/tournament/${id}`);
+  const gAfter = board2.json.games?.find((x) => x.id === g.id);
+  check("game persisted as white_win", gAfter?.status === "white_win", JSON.stringify(gAfter));
+
+  const winnerRow = board2.json.standings?.find((s) => s.playerId === white.playerId);
+  check("standings show the winner's point", winnerRow?.score === 1, JSON.stringify(board2.json.standings));
+
   done();
 }
+
 function done() {
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail === 0 ? 0 : 1);

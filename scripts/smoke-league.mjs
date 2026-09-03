@@ -26,7 +26,7 @@ async function post(path, body) {
 const board = (id) => fetch(`${BASE}/api/tournament/${id}`).then((r) => r.json());
 
 async function main() {
-  console.log("SundaySjakk league-flow smoke test\n");
+  console.log("SundayTicTacToe league-flow smoke test\n");
 
   // 1. Create a tournament (min 3 rounds — the server clamps to 3..7).
   const created = await post("/api/tournament", {
