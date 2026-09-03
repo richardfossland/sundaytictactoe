@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { no } from "@/lib/locale/no";
+
 // The player's board, addressed the way the DOM actually exposes it.
 //
 // MnkBoard (lib/client/MnkBoard.tsx) renders a `role="grid"` of
@@ -92,5 +94,49 @@ export class BoardPage {
   /** Current vertical scroll offset. The board must never push the page down. */
   scrollY(): Promise<number> {
     return this.page.evaluate(() => window.scrollY);
+  }
+
+  /**
+   * Height of the slot that RESERVES the turn banner's line (`.turn-slot`,
+   * min-height 57px in globals.css).
+   *
+   * Addressed as `turn-banner`'s parent rather than by class name: the testid is
+   * the stable hook, and the slot is only ever the element wrapping it. At game
+   * end the banner is hidden with `visibility` and never unmounted (L2), so this
+   * number must be the same before and after the winning move — a slot that
+   * collapses to 0 is exactly the shift the reservation exists to prevent.
+   */
+  turnSlotHeight(): Promise<number> {
+    // Measured in the page rather than with `boundingBox()`: at game end the
+    // slot carries `visibility: hidden`, and an API that treats invisible as
+    // boxless would report the very collapse this assertion exists to deny.
+    return this.turnBanner()
+      .locator("xpath=..")
+      .evaluate((el) => el.getBoundingClientRect().height);
+  }
+
+  /**
+   * Is the move list scrolled to its OWN bottom, i.e. is the latest move
+   * actually on screen?
+   *
+   * The 1 px slack absorbs sub-pixel scroll heights. An empty or non-overflowing
+   * list is trivially pinned (scrollTop 0, clientHeight === scrollHeight), which
+   * is correct: the last row is visible either way. On a 3×3 board that is in
+   * fact the only case — nine plies are five rows and `.movelist` is a fixed
+   * 132 px, so it never overflows — which is precisely why the layout spec
+   * asserts `scrollY` alongside this and not instead of it: on this app the
+   * page-level half is the one that catches a `scrollIntoView` regression.
+   */
+  movelistPinned(): Promise<boolean> {
+    return this.moveList().evaluate(
+      (el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1,
+    );
+  }
+
+  /** The resign button — `disabled` exactly while an optimistic move is pending
+   *  (GameView: `disabled={pending || acting || ended}`), which makes it the one
+   *  honest read-out of the pending lock from outside the component. */
+  resignButton(): Locator {
+    return this.page.getByRole("button", { name: no.player.resign, exact: true });
   }
 }
