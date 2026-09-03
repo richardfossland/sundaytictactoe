@@ -13,6 +13,13 @@
 # testing
 /coverage
 
+# Playwright (browser tier) — traces, videos and the HTML report are per-run
+# artifacts; CI uploads them instead of committing them.
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # next.js
 /.next/
 /out/

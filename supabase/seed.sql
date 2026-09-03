@@ -1,0 +1,8 @@
+-- Intentionally empty.
+--
+-- `supabase/config.toml` sets `[db.seed] sql_paths = ["./seed.sql"]`, and a
+-- missing file there aborts `supabase db reset` — which is the first command in
+-- the e2e recipe (docs/E2E.md). The e2e suite creates every row it needs through
+-- the real API (the /api/dev/quickmatch seam, or the public join flow), so there
+-- is deliberately no fixture data here: a seeded tournament would be state no
+-- shipped code path ever produces.

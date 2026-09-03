@@ -1,0 +1,24 @@
+# The wider browser run, once a night.
+#
+# Every PR pays for `desktop-chromium` only — the teacher's laptop, the layout
+# most changes touch. `mobile-chromium` (390×844, touch, the borrowed phone) is
+# just as load-bearing for this app but roughly doubles the suite's wall time, so
+# it runs here instead of on the critical path of every push.
+#
+# A red nightly is a real regression on a device the PR gate does not cover:
+# open it, do not rerun-until-green.
+name: nightly
+
+on:
+  schedule:
+    # 03:00 UTC — after the day's merges, well before a Norwegian school morning.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency: nightly-e2e
+
+jobs:
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    with:
+      projects: desktop-chromium mobile-chromium

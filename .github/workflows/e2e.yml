@@ -1,0 +1,170 @@
+# The BROWSER tier, as one reusable job.
+#
+# `ci.yml` calls it on every PR with the desktop project only; `nightly.yml`
+# calls it at 03:00 with desktop AND mobile. Keeping the steps in ONE file is
+# deliberate: a Supabase service name or an env-var mapping that drifts in only
+# one of the two callers is exactly the kind of gap that goes unnoticed until
+# the nightly run is the only thing that is red.
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      projects:
+        description: >-
+          Playwright project names, space-separated. Must match `projects[].name`
+          in playwright.config.ts.
+        type: string
+        default: desktop-chromium
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    # A full run is ~6-8 min (Supabase boot + production build + the suite).
+    # 20 leaves room for a cold image pull without letting a hung `next start`
+    # burn an hour.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Browsers are versioned WITH @playwright/test — a bumped library and a
+      # stale binary is an unsupported pair — so the cache key is that exact
+      # version, read from the lockfile-resolved package rather than package.json's
+      # caret range.
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        # The ~130 MB browser download is what the cache saves. Its APT
+        # dependencies are NOT cacheable — they live in the runner image, which is
+        # rebuilt for every job — so `install-deps` runs either way and only the
+        # download is skipped on a hit.
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npm run e2e:install
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          # Pinned, not `latest`: `supabase start`'s service names and the key
+          # names in `status -o env` are both CLI-version surface, and this suite
+          # reads both. Matches the version documented in docs/E2E.md.
+          version: 2.101.0
+
+      - name: Start local Supabase
+        # `-x` names come from `supabase start --help` for the pinned CLI. What
+        # stays is what gets used: `db` holds the schema, `rest` serves every
+        # server route, `realtime` carries the move broadcasts, `kong` fronts both
+        # (auth is not excludable), and `meta` is the CLI's own schema endpoint.
+        # Everything listed here is excluded purely to shave the boot.
+        #
+        # First start applies supabase/migrations/* in order and then runs
+        # supabase/seed.sql — which is deliberately empty (see its header): the
+        # suite mints every row it needs through the real API. The migrations are
+        # `tictactoe.`-schema-qualified and supabase/config.toml exposes that
+        # schema through PostgREST, so a plain local start is enough — no extra
+        # `db reset` step and nothing to grant by hand.
+        run: supabase start -x studio,inbucket,imgproxy,edge-runtime,analytics,vector,functions,storage
+
+      - name: Point the app at the local Supabase
+        # MUST run before the build: NEXT_PUBLIC_* are inlined by the compiler,
+        # so a build that ran before this step would ship a bundle pointing at
+        # nothing and the browser would never open a Realtime socket.
+        run: |
+          set -euo pipefail
+          supabase status -o env > "$RUNNER_TEMP/supabase.env"
+          # Names only, never values — enough to diagnose a renamed key across a
+          # CLI bump without printing the keys into a public log.
+          echo "status -o env exposes: $(cut -d= -f1 "$RUNNER_TEMP/supabase.env" | tr '\n' ' ')"
+
+          set -a
+          # shellcheck source=/dev/null
+          . "$RUNNER_TEMP/supabase.env"
+          set +a
+
+          url="${API_URL:-}"
+          # Newer CLIs are migrating the local keys to publishable/secret names;
+          # accept both so a CLI bump fails loudly here rather than as an opaque
+          # "Invalid API key" three steps later.
+          anon="${ANON_KEY:-${PUBLISHABLE_KEY:-}}"
+          secret="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+
+          missing=""
+          [ -n "$url" ] || missing="$missing API_URL"
+          [ -n "$anon" ] || missing="$missing ANON_KEY/PUBLISHABLE_KEY"
+          [ -n "$secret" ] || missing="$missing SERVICE_ROLE_KEY/SECRET_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::supabase status -o env carried no value for:$missing"
+            exit 1
+          fi
+
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$url"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$secret"
+            # The QR/join links read this and fall back to window.location.origin;
+            # pinning it keeps the copy deterministic under `next start`.
+            echo "NEXT_PUBLIC_BASE_URL=http://localhost:3000"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the production bundle
+        run: npm run e2e:build
+
+      - name: Playwright
+        # No `npm run dev`, no wrangler: playwright.config.ts's `webServer` boots
+        # `npm run e2e:server` itself (production build + E2E_SEAM=1) and waits on
+        # /api/health. `reuseExistingServer` is `!CI`, so CI always gets a fresh
+        # process — there is nothing on :3000 to adopt anyway.
+        env:
+          PW_PROJECTS: ${{ inputs.projects }}
+        run: |
+          set -euo pipefail
+          args=""
+          for p in $PW_PROJECTS; do args="$args --project=$p"; done
+          # shellcheck disable=SC2086
+          npx playwright test $args
+
+      - name: Supabase container logs
+        if: failure()
+        # Realtime refusing a join, or PostgREST rejecting the service key, shows
+        # up here and nowhere in the Playwright output.
+        run: |
+          supabase status || true
+          docker ps --format '{{.Names}}\t{{.Status}}' || true
+          for c in $(docker ps --filter "name=supabase_" --format '{{.Names}}'); do
+            echo "::group::$c"
+            docker logs --tail 120 "$c" 2>&1 || true
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-${{ github.run_id }}-${{ github.run_attempt }}
+          # `trace: retain-on-failure` and `video: retain-on-failure` write into
+          # test-results/; the HTML report indexes them. Open with
+          # `npx playwright show-report <unzipped>/playwright-report`.
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
