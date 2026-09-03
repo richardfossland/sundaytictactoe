@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // vitest runs in the node environment (no jsdom), so provide a minimal
-// localStorage. identity reads it lazily inside each call, so setting it per
-// test is enough.
+// window + localStorage. identity goes through lib/client/storage.ts, which
+// gates on `typeof window`, so `window` must exist too — pointing it at
+// globalThis itself (as it is in a real browser) makes `window.localStorage`
+// resolve to the same stub. identity reads it lazily inside each call, so
+// setting it per test is enough.
 class MemStorage {
   private m = new Map<string, string>();
   getItem(k: string): string | null {
@@ -21,9 +24,11 @@ class MemStorage {
 
 beforeEach(() => {
   (globalThis as unknown as { localStorage: MemStorage }).localStorage = new MemStorage();
+  (globalThis as unknown as { window: unknown }).window = globalThis;
 });
 afterEach(() => {
   delete (globalThis as unknown as { localStorage?: MemStorage }).localStorage;
+  delete (globalThis as unknown as { window?: unknown }).window;
 });
 
 import { identity } from "@/lib/client/identity";
