@@ -1,6 +1,7 @@
 import { getGame, resolveGameRpc } from "@/lib/server/store";
 import { authPlayer } from "@/lib/server/auth";
 import { afterGameResolved } from "@/lib/server/gameEvents";
+import { defer } from "@/lib/server/defer";
 import { fail, ok, readJson } from "@/lib/server/http";
 import type { GameStatus } from "@/lib/types";
 
@@ -39,6 +40,8 @@ async function handlePost(req: Request): Promise<Response> {
   const result = await resolveGameRpc(game.id, status, "play", /* requireLive */ true);
   if (!result.ok) return fail(409, result.conflict ?? "conflict");
 
-  await afterGameResolved(game, status, "play");
+  // The resignation is committed; scoring + broadcasts run after the response
+  // so the player is not held behind them (see lib/server/defer.ts).
+  defer(() => afterGameResolved(game, status, "play"), "resign");
   return ok({ status });
 }
