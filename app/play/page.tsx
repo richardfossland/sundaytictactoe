@@ -8,7 +8,15 @@ import { identity, type StoredPlayer } from "@/lib/client/identity";
 import { isValidPin } from "@/lib/codes";
 import { WaitingRoom } from "./WaitingRoom";
 
-type Screen = "init" | "join" | "name" | "showCode" | "resume" | "playing";
+type Screen =
+  | "init"
+  | "join"
+  | "name"
+  | "showCode"
+  | "resume"
+  | "playing"
+  /** Removed from a tournament that has already started — see attemptResume. */
+  | "removed";
 
 /** Say WHY the resume failed, for the failures that keep the session. The
  * student can act on "no connection" but not on "noe gikk galt". */
@@ -50,7 +58,7 @@ export default function Play() {
     setScreen("init");
     api
       .resume(stored.resumeCode, { tournamentId: stored.tournamentId })
-      .then((r) => {
+      .then(async (r) => {
         const next: StoredPlayer = {
           tournamentId: r.tournamentId,
           playerId: r.playerId,
@@ -59,6 +67,21 @@ export default function Play() {
         };
         identity.savePlayer(next);
         setMe(next);
+        // R4: we were removed. In the LOBBY that is almost always the host's
+        // ghost-sweep firing while the phone was locked, so put ourselves
+        // straight back in — the student did nothing wrong and has nothing to
+        // do. (A failed rejoin is not fatal: the waiting room shows the same
+        // offer as a button.) Once the tournament has STARTED the pairings are
+        // set, so we say it out loud instead of waiting in silence forever.
+        if (r.playerStatus === "left") {
+          if (r.tournamentStatus !== "lobby") {
+            setScreen("removed");
+            return;
+          }
+          await api
+            .rejoin(next.tournamentId, next.playerId, next.resumeCode)
+            .catch(() => {});
+        }
         setScreen("playing");
       })
       .catch((e) => {
@@ -154,6 +177,37 @@ export default function Play() {
         ) : (
           <span className="spin" />
         )}
+      </main>
+    );
+  }
+
+  if (screen === "removed") {
+    return (
+      <main className="center-screen">
+        <div
+          className="card card-narrow stack text-center scale-in"
+          style={{ alignItems: "center" }}
+        >
+          <div className="brandmark" style={{ justifyContent: "center" }}>
+            <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
+          </div>
+          <div style={{ fontSize: 40 }}>👋</div>
+          <h2 style={{ fontSize: 22 }}>{no.player.removedTitle}</h2>
+          <p className="muted">{no.player.removedBody}</p>
+          <button
+            className="btn btn-primary btn-lg"
+            style={{ marginTop: 6 }}
+            onClick={() => {
+              identity.clearPlayer();
+              setMe(null);
+              setError(null);
+              setPin("");
+              setScreen("join");
+            }}
+          >
+            {no.player.rejoinNew}
+          </button>
+        </div>
       </main>
     );
   }

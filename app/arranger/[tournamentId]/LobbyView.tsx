@@ -7,6 +7,7 @@ import { QRCode } from "@/lib/client/QRCode";
 import { identity } from "@/lib/client/identity";
 import { api } from "@/lib/client/api";
 import { usePresence } from "@/lib/client/usePresence";
+import { recordPresence, sweepCandidates } from "@/lib/client/lobbyKick";
 import { channels } from "@/lib/realtime";
 import { initials } from "@/lib/client/Confetti";
 import { teamColor } from "@/lib/tournament/teams";
@@ -53,31 +54,57 @@ export function LobbyView({
 
   const active = players.filter((p) => p.status === "active");
 
-  // Who's connected right now (students advertise presence keyed by playerId).
-  const present = usePresence(channels.presence(tournament.id));
-
   // Presence bookkeeping for the conservative auto-kick: a player must have
   // CONNECTED at least once and then been gone continuously past the grace
   // window. Refs (not state) so the stable interval below reads the latest.
+  // The rules themselves live in lib/client/lobbyKick.ts, under test.
   const seenRef = useRef<Set<string>>(new Set());
   const leftAtRef = useRef<Map<string, number>>(new Map());
   const kickedRef = useRef<Set<string>>(new Set());
+  // Is the HOST's own presence channel healthy, and have we seen a fresh sync
+  // since it last (re)subscribed? Both gate the sweep: on a re-join Realtime can
+  // hand us an EMPTY presence_state before the class re-announces itself, and
+  // stamping that as "everyone left" mass-kicks the room three minutes later.
+  const subscribedRef = useRef(false);
+  const needsSyncRef = useRef(true);
+
+  // Who's connected right now (students advertise presence keyed by playerId).
+  const present = usePresence(
+    channels.presence(tournament.id),
+    undefined,
+    (status) => {
+      if (status === "SUBSCRIBED") {
+        subscribedRef.current = true;
+        return;
+      }
+      // CHANNEL_ERROR / TIMED_OUT / CLOSED: everything we think we know about
+      // who is offline came from a socket that is no longer trustworthy. Throw
+      // the absence clock away and wait for a fresh sync before starting it.
+      subscribedRef.current = false;
+      needsSyncRef.current = true;
+      leftAtRef.current.clear();
+    },
+  );
+
   const latest = useRef({ active, present, hostCode });
   useEffect(() => {
     latest.current = { active, present, hostCode };
   });
 
   useEffect(() => {
-    const now = Date.now();
-    for (const id of present) {
-      seenRef.current.add(id);
-      leftAtRef.current.delete(id);
-    }
-    for (const id of seenRef.current) {
-      if (!present.has(id) && !leftAtRef.current.has(id)) {
-        leftAtRef.current.set(id, now);
-      }
-    }
+    recordPresence(
+      {
+        seen: seenRef.current,
+        leftAt: leftAtRef.current,
+        kicked: kickedRef.current,
+      },
+      present,
+      Date.now(),
+      // The first snapshot after a (re)subscribe is the sync we were waiting
+      // for: absorb it, but never stamp anyone absent from it.
+      !needsSyncRef.current,
+    );
+    needsSyncRef.current = false;
   }, [present]);
 
   function kick(playerId: string) {
@@ -89,20 +116,27 @@ export function LobbyView({
   useEffect(() => {
     const iv = setInterval(() => {
       const cur = latest.current;
-      if (!cur.hostCode) return;
-      const now = Date.now();
-      for (const p of cur.active) {
-        if (cur.present.has(p.id)) continue; // online
-        if (!seenRef.current.has(p.id)) continue; // never connected — leave it
-        if (kickedRef.current.has(p.id)) continue;
-        const leftAt = leftAtRef.current.get(p.id);
-        if (leftAt && now - leftAt > AUTO_KICK_MS) {
-          kickedRef.current.add(p.id);
-          api
-            .kick(tournament.id, cur.hostCode, p.id)
-            .then(onChanged)
-            .catch(() => kickedRef.current.delete(p.id)); // allow a later retry
-        }
+      const code = cur.hostCode;
+      if (!code) return;
+      const ids = sweepCandidates({
+        active: cur.active,
+        present: cur.present,
+        seen: seenRef.current,
+        leftAt: leftAtRef.current,
+        kicked: kickedRef.current,
+        hostSubscribed: subscribedRef.current,
+        // A hidden host tab is throttled: its presence view is stale by
+        // construction, so it must not evict anyone.
+        visible: document.visibilityState === "visible",
+        now: Date.now(),
+        windowMs: AUTO_KICK_MS,
+      });
+      for (const id of ids) {
+        kickedRef.current.add(id);
+        api
+          .kick(tournament.id, code, id)
+          .then(onChanged)
+          .catch(() => kickedRef.current.delete(id)); // allow a later retry
       }
     }, 30_000);
     return () => clearInterval(iv);

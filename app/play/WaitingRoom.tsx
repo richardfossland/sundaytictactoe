@@ -5,6 +5,7 @@ import type { BoardState, PublicGame } from "@/lib/dto";
 import { useBoardState } from "@/lib/client/useBoardState";
 import { usePresence } from "@/lib/client/usePresence";
 import { channels } from "@/lib/realtime";
+import { api } from "@/lib/client/api";
 import { identity, type StoredPlayer } from "@/lib/client/identity";
 import { initials } from "@/lib/client/Confetti";
 import { PredictPanel } from "@/lib/client/PredictPanel";
@@ -94,6 +95,8 @@ export function WaitingRoom({
   onLeave: () => void;
 }) {
   const [showCode, setShowCode] = useState(false);
+  const [rejoining, setRejoining] = useState(false);
+  const [rejoinError, setRejoinError] = useState(false);
   // Latch the active game so the result screen survives board refetches until
   // the student dismisses it.
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
@@ -185,6 +188,52 @@ export function WaitingRoom({
     );
   }
 
+  // R4: the host's ghost-sweep removed us from the LOBBY (a locked phone stops
+  // the presence heartbeat). The old behaviour was to keep saying "venter på at
+  // arrangøren starter …" to a student who was no longer in the tournament at
+  // all. Say what happened, and offer the one button that undoes it.
+  const meRow = state?.players.find((p) => p.id === me.playerId) ?? null;
+  if (status === "lobby" && meRow?.status === "left") {
+    const rejoin = async () => {
+      setRejoining(true);
+      setRejoinError(false);
+      try {
+        await api.rejoin(me.tournamentId, me.playerId, me.resumeCode);
+        await refresh();
+      } catch {
+        setRejoinError(true);
+      } finally {
+        setRejoining(false);
+      }
+    };
+    return (
+      <main className="center-screen">
+        <div
+          className="card card-narrow stack text-center scale-in"
+          style={{ alignItems: "center" }}
+        >
+          <div className="brandmark" style={{ justifyContent: "center" }}>
+            <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
+          </div>
+          <div style={{ fontSize: 40 }}>👋</div>
+          <h2 style={{ fontSize: 22 }}>{no.player.removedLobbyTitle}</h2>
+          <p className="muted">{no.player.removedLobbyBody}</p>
+          <button
+            className="btn btn-primary btn-lg"
+            style={{ marginTop: 6 }}
+            disabled={rejoining}
+            onClick={rejoin}
+          >
+            {rejoining ? <span className="spin" /> : no.player.rejoinLobby}
+          </button>
+          {rejoinError && (
+            <div className="banner banner-error">{no.player.rejoinFailed}</div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   if (activeGameId) {
     // Round timer (league rounds only) — fed to the player's board.
     const activeGame = state?.games.find((g) => g.id === activeGameId);
@@ -227,8 +276,7 @@ export function WaitingRoom({
   // or the tournament is over, where nothing more is coming for them.
   const showWaitingSpinner = !eliminated && status !== "finished";
 
-  const myTeam =
-    state?.players.find((p) => p.id === me.playerId)?.team ?? null;
+  const myTeam = meRow?.team ?? null;
 
   return (
     <main className="center-screen">

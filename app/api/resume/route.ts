@@ -65,5 +65,10 @@ async function handleResume(req: Request): Promise<Response> {
     playerId: player.id,
     displayName: player.display_name,
     tournamentStatus: fresh.status,
+    // R4: the client MUST be told it was removed. The lobby ghost-sweep can kick
+    // a student whose phone was locked, and without this the waiting room went
+    // on saying "venter på at arrangøren starter …" forever. In the lobby the
+    // client rejoins itself; after the start it says so out loud.
+    playerStatus: player.status,
   });
 }

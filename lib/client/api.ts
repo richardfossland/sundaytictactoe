@@ -4,7 +4,7 @@
 // these; the browser never touches the database directly.
 
 import type { BoardState, GameDetail } from "@/lib/dto";
-import type { GameStatus, Turn } from "@/lib/types";
+import type { GameStatus, PlayerStatus, Turn } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -131,6 +131,10 @@ export interface ResumeResult {
   playerId: string;
   displayName: string;
   tournamentStatus: string;
+  /** "left" = this player has been removed (lobby ghost-sweep, or a walkover).
+   * The client acts on it instead of waiting forever — see app/play/page.tsx.
+   * Optional so an older/edge-cached response still parses. */
+  playerStatus?: PlayerStatus;
 }
 
 export interface CasualCreated {
@@ -276,4 +280,12 @@ export const api = {
 
   kick: (tournamentId: string, hostCode: string, playerId: string) =>
     post<{ ok: boolean }>("/api/lobby/kick", { tournamentId, hostCode, playerId }),
+
+  // ---- the student's own un-kick (lobby only) ----
+  rejoin: (tournamentId: string, playerId: string, resumeCode: string) =>
+    post<Record<string, never>>("/api/lobby/rejoin", {
+      tournamentId,
+      playerId,
+      resumeCode,
+    }),
 };
