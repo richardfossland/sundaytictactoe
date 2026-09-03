@@ -46,6 +46,7 @@ import { GET } from "@/app/api/host/tournaments/route";
 import { DELETE } from "@/app/api/host/tournaments/[id]/route";
 
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+const TID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -80,14 +81,14 @@ describe("GET /api/host/tournaments", () => {
 describe("DELETE /api/host/tournaments/[id]", () => {
   it("401 when not signed in", async () => {
     h.requireHost.mockRejectedValue(new h.HostAuthError(401, "not_signed_in"));
-    const res = await DELETE(new Request("http://x"), ctx("t1"));
+    const res = await DELETE(new Request("http://x"), ctx(TID));
     expect(res.status).toBe(401);
     expect(h.deleteTournamentOwned).not.toHaveBeenCalled();
   });
 
   it("403 when signed in but not allow-listed", async () => {
     h.requireHost.mockRejectedValue(new h.HostAuthError(403, "not_allowlisted"));
-    const res = await DELETE(new Request("http://x"), ctx("t1"));
+    const res = await DELETE(new Request("http://x"), ctx(TID));
     expect(res.status).toBe(403);
     expect(h.deleteTournamentOwned).not.toHaveBeenCalled();
   });
@@ -95,17 +96,27 @@ describe("DELETE /api/host/tournaments/[id]", () => {
   it("200 when the owner deletes their own tournament", async () => {
     h.requireHost.mockResolvedValue({ id: "owner-1", email: "h@x.no" });
     h.deleteTournamentOwned.mockResolvedValue(true);
-    const res = await DELETE(new Request("http://x"), ctx("t1"));
+    const res = await DELETE(new Request("http://x"), ctx(TID));
     expect(res.status).toBe(200);
-    expect(h.deleteTournamentOwned).toHaveBeenCalledWith("t1", "owner-1");
+    expect(h.deleteTournamentOwned).toHaveBeenCalledWith(TID, "owner-1");
     expect((await res.json()).ok).toBe(true);
   });
 
   it("404 when the id isn't owned by the host (no leak)", async () => {
     h.requireHost.mockResolvedValue({ id: "owner-1", email: "h@x.no" });
     h.deleteTournamentOwned.mockResolvedValue(false);
-    const res = await DELETE(new Request("http://x"), ctx("someone-elses"));
+    const res = await DELETE(new Request("http://x"), ctx("22222222-2222-4222-8222-222222222222"));
     expect(res.status).toBe(404);
     expect((await res.json()).error).toBe("not_found");
+  });
+
+  // R1b: a malformed id (bot probe, stale link) must not reach Postgres — a
+  // non-UUID `.eq("id", …)` throws 22P02, which used to surface as a false 503.
+  it("404 on a malformed (non-UUID) id, without ever calling the store", async () => {
+    h.requireHost.mockResolvedValue({ id: "owner-1", email: "h@x.no" });
+    const res = await DELETE(new Request("http://x"), ctx("probe"));
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("not_found");
+    expect(h.deleteTournamentOwned).not.toHaveBeenCalled();
   });
 });

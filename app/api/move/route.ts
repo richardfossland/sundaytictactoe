@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/gameEvents";
 import { defer } from "@/lib/server/defer";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 import type { Turn } from "@/lib/types";
 
 // POST /api/move — THE server-authoritative move path (spec §4).
@@ -37,6 +38,10 @@ async function handleMove(req: Request): Promise<Response> {
     resumeCode?: string;
   }>(req);
   if (!body?.gameId || typeof body.cell !== "number") return fail(400, "bad_request");
+  // A malformed gameId (bot probe, stale link) is a client error like any other
+  // bad body field: reject BEFORE it reaches Postgres (a non-UUID `.eq("id", …)`
+  // throws 22P02, which the catch-all above would turn into a false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
 
   // Rate-limit per player, not per IP: a whole classroom shares one school
   // NAT IP, so an IP-wide cap would throttle legitimate play. The playerId is

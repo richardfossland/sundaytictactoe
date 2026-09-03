@@ -3,6 +3,7 @@ import {
   generatePin,
   generateResumeCode,
   generateUnique,
+  isUuid,
   isValidPin,
   normalizeResumeCode,
   type Rng,
@@ -59,6 +60,33 @@ describe("isValidPin", () => {
     expect(isValidPin("12345")).toBe(false);
     expect(isValidPin("abcdef")).toBe(false);
     expect(isValidPin(" 402815 ")).toBe(true);
+  });
+});
+
+describe("isUuid", () => {
+  it("accepts a well-formed v4 UUID, case-insensitively", () => {
+    expect(isUuid("11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(isUuid("11111111-1111-4111-8111-111111111111".toUpperCase())).toBe(true);
+  });
+
+  // Regression: GET /api/tournament/probe (bot scans, stale links) made the
+  // store throw Postgres 22P02 for a non-UUID id — a client error the route
+  // must catch itself, not let escape as a false 503 (R1b).
+  it("rejects a bot-probe / non-UUID string", () => {
+    expect(isUuid("probe")).toBe(false);
+    expect(isUuid("")).toBe(false);
+    expect(isUuid("12345")).toBe(false);
+  });
+
+  it("rejects a near-miss shape (wrong segment length, missing dashes)", () => {
+    expect(isUuid("11111111-1111-4111-8111-11111111111")).toBe(false); // 11 not 12
+    expect(isUuid("111111111111411181111111111111111")).toBe(false); // no dashes
+  });
+
+  it("rejects non-string input", () => {
+    expect(isUuid(undefined)).toBe(false);
+    expect(isUuid(null)).toBe(false);
+    expect(isUuid(12345)).toBe(false);
   });
 });
 

@@ -45,6 +45,19 @@ export function isValidPin(input: string): boolean {
   return PIN_RE.test(input.trim());
 }
 
+// RFC-4122 shape (version 1-5, variant 8/9/a/b), case-insensitive — matches what
+// Postgres's gen_random_uuid() produces. A malformed id (e.g. a bot probing
+// `/api/tournament/probe`) must never reach Postgres: an id column rejects a
+// non-UUID string with `22P02 invalid input syntax for type uuid`, which is a
+// genuine client error, not a server outage — callers should check this FIRST
+// and answer 404/400 instead of letting the query throw into a 503.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(s: unknown): s is string {
+  return typeof s === "string" && UUID_RE.test(s);
+}
+
 /** Generate a code guaranteed unique against an existing set (retry on clash). */
 export function generateUnique(
   gen: (rng: Rng) => string,

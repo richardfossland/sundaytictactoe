@@ -5,7 +5,7 @@ import {
 } from "@/lib/server/store";
 import { maybeAutoFinishStale } from "@/lib/server/lifecycle";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
-import { normalizeResumeCode, isValidPin } from "@/lib/codes";
+import { normalizeResumeCode, isValidPin, isUuid } from "@/lib/codes";
 
 // POST /api/resume — restore a student session from their resume code.
 // Accepts { resumeCode, pin } or { resumeCode, tournamentId }. The resume code
@@ -36,6 +36,14 @@ async function handleResume(req: Request): Promise<Response> {
 
   const resumeCode = normalizeResumeCode(body?.resumeCode?.toString() ?? "");
   if (resumeCode.length < 6) return fail(400, "invalid_code");
+
+  // A malformed tournamentId is a bad body field like any other — reject it
+  // BEFORE it reaches Postgres (a non-UUID `.eq("id", …)` throws 22P02, which
+  // the catch-all above would otherwise turn into a false 503 that wipes the
+  // student's session — see the comment on the POST handler).
+  if (body?.tournamentId !== undefined && !isUuid(body.tournamentId)) {
+    return fail(400, "bad_request");
+  }
 
   const tournament = body?.tournamentId
     ? await getTournament(body.tournamentId)
