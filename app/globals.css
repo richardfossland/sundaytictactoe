@@ -755,6 +755,11 @@ a:focus-visible,
   aspect-ratio: 1;
   border-radius: 8px;
   overflow: hidden;
+  /* manipulation, not none: the board is the phone's main scroll surface, so a
+     drag starting on an empty cell must still scroll the page underneath —
+     this only removes double-tap-to-zoom. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* responsive game layout: board centre, player info stacked (narrow) or on the
@@ -1518,6 +1523,8 @@ a:focus-visible,
   display: grid;
   width: 100%;
   gap: clamp(4px, 1.4%, 12px);
+  user-select: none;
+  -webkit-user-select: none;
 }
 .mnk-cell {
   aspect-ratio: 1;
@@ -1532,6 +1539,10 @@ a:focus-visible,
   background: linear-gradient(180deg, #232a34, #181c24);
   color: inherit;
   cursor: default;
+  /* manipulation, not none: cells sit inside .board-shell, which is itself the
+     phone's main scroll surface — this only removes double-tap-to-zoom. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.15s var(--ease-out), transform 0.08s var(--ease-out),
     box-shadow 0.15s var(--ease-out);
 }
