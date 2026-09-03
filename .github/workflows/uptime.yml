@@ -11,7 +11,10 @@ name: uptime
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    # Offset minutes (not */10): GitHub never registered the original */10
+    # schedule in ~2 h after merge; re-saving the file re-registers it, and
+    # off-the-hour minutes also dodge the top-of-hour scheduling congestion.
+    - cron: "5,15,25,35,45,55 * * * *"
   workflow_dispatch:
 
 concurrency: uptime
