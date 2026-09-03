@@ -17,6 +17,11 @@ const RAYS: [number, number][] = [
   [1, -1], // south-west
 ];
 
+// Same four directions, flat — the search's inner loop reads these millions of
+// times and destructuring `[dr, dc]` out of RAYS allocates on every iteration.
+const RAY_DR = [0, 1, 1, 1];
+const RAY_DC = [1, 0, 1, -1];
+
 /** The winning line on the board, or null if no side has k in a row. Returns the
  * FIRST line found (sufficient — a board has at most one winner in normal play). */
 export function findWinLine(
@@ -59,4 +64,44 @@ export function findWin(
   k: number,
 ): Mark | null {
   return findWinLine(board, m, n, k)?.mark ?? null;
+}
+
+/** Does the mark sitting on `cell` complete k in a row THROUGH that cell?
+ *
+ * Walks the four lines through one cell (O(8k)) instead of rescanning the whole
+ * board (findWin's O(m·n·k)). This is the check a search wants: inside negamax
+ * the position differs from its parent by exactly one placed mark, so the only
+ * line that can have appeared is one running through that cell.
+ *
+ * ⚠️ Only equivalent to `findWin` when the board held NO line before the mark
+ * was placed. Callers must establish that (both do: chooseMove rejects an
+ * already-won board up front, and every search node inherits it from the root).
+ * Accepts a string or a char array so the search can mutate in place. */
+export function completesLine(
+  board: ArrayLike<string>,
+  m: number,
+  n: number,
+  k: number,
+  cell: number,
+): boolean {
+  const mark = board[cell];
+  if (mark !== "x" && mark !== "o") return false;
+  const r0 = (cell / n) | 0;
+  const c0 = cell % n;
+  for (let d = 0; d < 4; d++) {
+    const dr = RAY_DR[d];
+    const dc = RAY_DC[d];
+    let run = 1;
+    // Extend forwards along the ray, then backwards along the same line.
+    for (let sign = -1; sign <= 1; sign += 2) {
+      let r = r0 + dr * sign;
+      let c = c0 + dc * sign;
+      while (r >= 0 && r < m && c >= 0 && c < n && board[r * n + c] === mark) {
+        if (++run >= k) return true;
+        r += dr * sign;
+        c += dc * sign;
+      }
+    }
+  }
+  return false;
 }
