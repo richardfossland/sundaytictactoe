@@ -154,7 +154,9 @@ export function SpectateGame({
 
         <SpectatePlayer name={white} side="white" />
 
-        {sans.length > 0 && <MoveList sans={sans} />}
+        {/* Always mounted (L8): the list is a fixed-height block, so it must not
+            appear on the first move and push the projector layout around. */}
+        <MoveList sans={sans} />
       </div>
 
       <SoundToggle />
