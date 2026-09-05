@@ -77,3 +77,8 @@ e1556da73ca38578e98497234902efe5bbe9c9bc  chess #46 -> TTT #2
 # still surfaces as backlog for a human to look at. Configurable: edit the
 # regex below if dependabot's subject convention changes. -----------------
 pattern:^chore\(deps(-dev)?\): bump
+# Equivalents done independently in TTT the same day (verified 2026-09-05):
+#75   # chess R1b malformed ids → TTT #28 (file-identical, prose body)
+#85   # chess lockfile audit-fix → TTT #39 (npm audit fix, same alerts)
+#88   # chess uptime cron re-register → TTT #41 (offset minutes)
+#76   # chess R9 PGN-off-poll — deliberately NOT ported (TTT boards are ≤25 chars)
