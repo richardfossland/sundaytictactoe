@@ -1,0 +1,79 @@
+# scripts/port-ignore.txt
+#
+# Manual allowlist for scripts/port-status.sh: chess commits that would
+# otherwise show up as backlog but shouldn't, because TTT already carries
+# an equivalent change that predates every automatic recognition method
+# (cherry-pick trailer, "Port of sundaychess#NN", chess-side "Port: TTT
+# #NN") — either it was part of TTT from the initial clone (2026-06-16), or
+# it was ported by hand before either porting convention existed. Each SHA
+# below was verified by diffing the chess commit's file list against the
+# corresponding TTT commit before being added here — do the same before
+# adding more; don't add an entry just because a commit "looks routine".
+#
+# Two entry shapes, one per non-comment, non-blank line:
+#
+#   <chess-sha-or-#NN>   free-text comment
+#     A single chess commit. Either its full/abbreviated SHA (on chess/main)
+#     or `#NN`, its sundaychess PR number — NN is resolved to the squash
+#     commit the same way port-status.sh resolves a "Port of
+#     sundaychess#NN" reference. Comment is everything after the first
+#     run of whitespace; it isn't parsed, so it may itself contain "#".
+#
+#   pattern:<ERE>
+#     Skip every chess commit whose *subject* matches this bash-flavoured
+#     extended regex (tested with `[[ "$subject" =~ $pattern ]]`). No
+#     trailing comment on a pattern line — put an explanation on the line
+#     above instead. Whole-class escape hatch: use this for a class of
+#     commit that never needs a real port, not for one-off equivalents
+#     (those get an explicit entry above so they stay individually
+#     auditable).
+#
+# A line starting "# " (or bare "#") is a full-line comment; "#NN" (hash
+# directly followed by a digit, no space) is a PR-number entry instead —
+# both begin with the same character, so the space is what tells them
+# apart. Blank lines are ignored.
+
+# --- ported before "Port of sundaychess#NN" existed (all pre-date TTT's
+# own port-status.sh / port-from-chess.sh, added by TTT #36) -------------
+
+# chess #44 "polish: branded 404 + host-board loading route" -> TTT #1
+# "polish: UI/UX + brand harmonization": both add app/not-found.tsx as the
+# on-brand 404; TTT #1 folds it into a broader harmonization pass instead
+# of a standalone PR, so the "Port of" line was never written.
+90ee6327d7c282b071e158a237e39ab56e11a181  chess #44 -> TTT #1
+
+# chess #45 "feat: Sunday Account host login + my-turnerings dashboard +
+# delete" -> TTT #3, same title. Same host-login/auth file set
+# (lib/server/auth.ts, lib/supabase/auth-*.ts, app/auth/callback/route.ts,
+# app/host/**); TTT nests the per-tournament view under app/arranger/**
+# instead of app/host/[tournamentId]/** (see scripts/port-exclude.txt).
+2b5e3f02d14f76b34e7d9ec5bb7c293b8d0877ce  chess #45 -> TTT #3
+
+# chess #46 'copy: drop "Kahoot" as a product description' -> TTT #2,
+# same title, identical file list (README.md, app/layout.tsx, app/page.tsx,
+# lib/codes.ts).
+e1556da73ca38578e98497234902efe5bbe9c9bc  chess #46 -> TTT #2
+
+# chess #48 "ci: build the OpenNext Worker in CI (catch deploy-time
+# breaks)" -> TTT #5, same title, identical file list
+# (.github/workflows/ci.yml, package.json).
+8f4090070a3026b65367ed8373a9409fc3d4a165  chess #48 -> TTT #5
+
+# chess #49 "Add a hard timeout to server-side realtime broadcasts" ->
+# TTT #6, same title, identical file list (lib/server/broadcast.ts,
+# test/broadcast.test.ts).
+2afb5417e1e7d7c586ca750b285810f6a61e7e41  chess #49 -> TTT #6
+
+# chess #50 "chore: add Dependabot config (npm/cargo/actions, weekly,
+# grouped)" -> TTT #7, same title, identical file list
+# (.github/dependabot.yml).
+882142a9c1bdda982debe07330cdddb0a69f0ae3  chess #50 -> TTT #7
+
+# --- dependency bumps: dependabot runs independently in this repo too, so
+# a chess-side dependency bump never has anything for TTT to port. Scoped
+# to dependabot's own commit-subject convention ("bump ..."), not the
+# whole chore(deps) namespace, so a hand-written chore(deps) commit that
+# isn't a routine bump (e.g. a manual `npm audit fix` lockfile refresh)
+# still surfaces as backlog for a human to look at. Configurable: edit the
+# regex below if dependabot's subject convention changes. -----------------
+pattern:^chore\(deps(-dev)?\): bump

@@ -3,15 +3,29 @@
 # non-excluded path and have not yet been ported into this repo. This is the
 # real backlog of un-ported chess infra work.
 #
-# "Already ported" is recognised two ways, since a port PR body can carry
-# either form:
+# "Already ported" is recognised three ways, since a port PR body can carry
+# any of these forms:
 #   - a `(cherry picked from commit <sha>)` trailer — written automatically
 #     by `git cherry-pick -x`, which scripts/port-from-chess.sh uses;
 #   - a `Port of sundaychess#<NN>` line, where NN is a sundaychess PR number.
-#     NN is mapped to the chess squash-merge commit via
+#     A single mention can carry more than one NN — "Port of
+#     sundaychess#66 and #70", "...#71 (the rig) and sundaychess#74 (the CI
+#     job)", "...#64 (ef046d6) + #68" — every NN on that line is read, not
+#     just the first (see port::extract_port_pr_refs in port-common.sh).
+#     Each NN is mapped to the chess squash-merge commit via
 #     `git log --grep "(#NN)"` against the chess remote (chess merges PRs
 #     with GitHub's default squash subject "<subject> (#NN)").
-# Both are looked for anywhere in this repo's history on origin/main.
+#   - a `Port: TTT #<NN>` line in the CHESS-side commit's own body — the
+#     mirror convention documented in sundaychess's docs/PORTING.md, for a
+#     port that landed here without repeating the chess PR number.
+# The first two are looked for anywhere in this repo's history on
+# origin/main; the third is looked for directly on the chess commit.
+#
+# On top of that, scripts/port-ignore.txt is a manual allowlist for commits
+# that predate all three conventions above (ported before they existed, or
+# already part of TTT from the initial clone) plus a `pattern:` escape
+# hatch for whole classes of commit that never need a real port (dependency
+# bumps: dependabot runs independently in both repos already).
 #
 # Usage: scripts/port-status.sh
 set -eo pipefail
@@ -32,6 +46,8 @@ port::load_exclude_patterns
 
 CHESS_MAIN="${CHESS_REMOTE_NAME}/main"
 
+port::load_ignore
+
 # --- 1) SHAs referenced by a "(cherry picked from commit <sha>)" trailer ---
 
 cherry_pick_shas=()
@@ -44,6 +60,7 @@ done < <(git log "$TTT_HISTORY_REF" --format=%B \
            | grep -Eo '[0-9a-f]{7,40}')
 
 # --- 2) "Port of sundaychess#<NN>" -> NN mapped to the chess squash SHA ----
+# A mention can name more than one NN (combined ports); every one is read.
 
 port_pr_shas=()
 while IFS= read -r pr_no; do
@@ -51,9 +68,7 @@ while IFS= read -r pr_no; do
   sha="$(git log "$CHESS_MAIN" --format='%H %s' \
            | grep -F -- "(#${pr_no})" | head -1 | cut -d' ' -f1)"
   [[ -n "$sha" ]] && port_pr_shas+=("$sha")
-done < <(git log "$TTT_HISTORY_REF" --format=%B \
-           | grep -Eo 'Port of sundaychess#[0-9]+' \
-           | grep -Eo '[0-9]+')
+done < <(git log "$TTT_HISTORY_REF" --format=%B | port::extract_port_pr_refs)
 
 ported_shas=("${cherry_pick_shas[@]}" "${port_pr_shas[@]}")
 
@@ -75,6 +90,10 @@ backlog_count=0
 while IFS= read -r sha; do
   [[ -z "$sha" ]] && continue
   port::is_ported "$sha" && continue
+  port::chess_self_reports_port "$sha" && continue
+
+  subject="$(git log -1 --format=%s "$sha")"
+  port::is_ignored "$sha" "$subject" && continue
 
   changed_files=()
   while IFS= read -r f; do
@@ -90,7 +109,6 @@ while IFS= read -r sha; do
 
   backlog_count=$((backlog_count + 1))
   commit_date="$(git log -1 --format=%as "$sha")"
-  subject="$(git log -1 --format=%s "$sha")"
   echo "* ${sha:0:9}  $commit_date  $subject"
   printf '    %s\n' "${non_excluded[@]}"
   echo
