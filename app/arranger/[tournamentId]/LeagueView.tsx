@@ -8,9 +8,11 @@ import { no } from "@/lib/locale/no";
 import { RoundTimer } from "@/lib/client/RoundTimer";
 import { useCountdown } from "@/lib/client/useCountdown";
 import { JoinChip } from "@/lib/client/JoinChip";
+import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
 import { OverrideModal } from "./OverrideModal";
 import { CodesModal } from "./CodesModal";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 
 function resultLabel(g: PublicGame, name: (id: string | null) => string): string {
   switch (g.status) {
@@ -25,7 +27,9 @@ function resultLabel(g: PublicGame, name: (id: string | null) => string): string
     case "bye":
       return no.host.bye;
     case "aborted":
-      return no.host.abort;
+      // A status, not an instruction — `no.host.abort` is the OverrideModal
+      // button's imperative label ("Annuller partiet"); this is its past tense.
+      return no.host.aborted;
     default:
       return "";
   }
@@ -44,6 +48,10 @@ export function LeagueView({
   const [error, setError] = useState<string | null>(null);
   const [overrideGame, setOverrideGame] = useState<PublicGame | null>(null);
   const [showCodes, setShowCodes] = useState(false);
+  // Force-resolve is irreversible (sets every live game in the round to a
+  // draw), so it's confirmed via the themed dialog rather than window.confirm
+  // (an OS popup a teacher can miss on a projector).
+  const [confirmForce, setConfirmForce] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -117,9 +125,13 @@ export function LeagueView({
     }
   }
 
-  async function force() {
+  function requestForce() {
     if (!hostCode) return setError(no.host.missingHostCode);
-    if (!confirm(no.host.forceResolveConfirm)) return;
+    setConfirmForce(true);
+  }
+
+  async function force() {
+    setConfirmForce(false);
     setBusy(true);
     setError(null);
     try {
@@ -312,7 +324,7 @@ export function LeagueView({
               }}
             >
               <span>⏰ {no.host.timeUpSuggestion}</span>
-              <button className="btn btn-danger" disabled={busy} onClick={force} style={{ flexShrink: 0 }}>
+              <button className="btn btn-danger" disabled={busy} onClick={requestForce} style={{ flexShrink: 0 }}>
                 {busy ? <span className="spin" /> : no.host.endRound}
               </button>
             </div>
@@ -327,7 +339,7 @@ export function LeagueView({
               {busy ? <span className="spin" /> : isLastRound ? no.host.finishRound : no.host.nextRound}
             </button>
             {liveCount > 0 && (
-              <button className="btn btn-danger" disabled={busy} onClick={force}>
+              <button className="btn btn-danger" disabled={busy} onClick={requestForce}>
                 {busy ? <span className="spin" /> : no.host.forceResolve}
               </button>
             )}
@@ -364,6 +376,18 @@ export function LeagueView({
           tournamentId={tournament.id}
           hostCode={hostCode ?? ""}
           onClose={() => setShowCodes(false)}
+        />
+      )}
+
+      <FullscreenToggle />
+
+      {confirmForce && (
+        <ConfirmDialog
+          message={no.host.forceResolveConfirm}
+          confirmLabel={no.host.forceResolve}
+          danger
+          onConfirm={force}
+          onCancel={() => setConfirmForce(false)}
         />
       )}
     </main>

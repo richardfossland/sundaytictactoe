@@ -359,6 +359,14 @@ a:focus-visible,
   font-size: 17px;
   border-radius: 13px;
 }
+/* Compact button for dense inline rows (e.g. a tournament list's
+ * manage/delete actions) where a full 44px touch target would crowd the row. */
+.btn-sm {
+  padding: 7px 13px;
+  font-size: 13px;
+  min-height: 32px;
+  border-radius: 9px;
+}
 .btn-block {
   width: 100%;
   display: flex;
@@ -465,10 +473,23 @@ a:focus-visible,
   border: 1px solid var(--ink-line);
   color: var(--txt-dim);
 }
+/* Static success banner (e.g. "check your inbox" after a magic link is sent).
+ * Same green as .banner-turn, without the "your move" sweep animation — this
+ * is a one-off confirmation, not a live turn indicator. */
+.banner-ok {
+  background: color-mix(in srgb, var(--turn) 18%, var(--ink-2));
+  border: 1px solid color-mix(in srgb, var(--turn) 45%, transparent);
+  color: #d4f3da;
+}
 .banner-error {
   background: color-mix(in srgb, var(--danger) 18%, var(--ink-2));
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   color: #f3c9c5;
+}
+.banner-warn {
+  background: color-mix(in srgb, var(--warn) 18%, var(--ink-2));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  color: #f3d9c4;
 }
 /* L2: the turn banner is always mounted (visibility:hidden, never unmounted,
    once the game ends) so nothing above .board-shell can change height
@@ -1310,6 +1331,31 @@ a:focus-visible,
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 .fullscreen-toggle:hover {
+  opacity: 1;
+  transform: scale(1.06);
+}
+/* Notify opt-in toggle — same pill, stacked above the fullscreen toggle.
+ * Only rendered while there is something to opt into (see NotifyToggle.tsx),
+ * so it never reserves space it isn't using. */
+.notify-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 114px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--ink-soft) 80%, transparent);
+  border: 1px solid var(--ink-line-strong);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.notify-toggle:hover {
   opacity: 1;
   transform: scale(1.06);
 }

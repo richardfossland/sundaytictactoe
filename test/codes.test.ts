@@ -5,6 +5,7 @@ import {
   generateUnique,
   isUuid,
   isValidPin,
+  maskCode,
   normalizeResumeCode,
   type Rng,
 } from "@/lib/codes";
@@ -87,6 +88,27 @@ describe("isUuid", () => {
     expect(isUuid(undefined)).toBe(false);
     expect(isUuid(null)).toBe(false);
     expect(isUuid(12345)).toBe(false);
+  });
+});
+
+describe("maskCode", () => {
+  it("replaces every character but the dash with a bullet", () => {
+    expect(maskCode("KOLE-7F")).toBe("••••-••");
+  });
+
+  it("preserves length and dash position for any code shape", () => {
+    expect(maskCode("AB-C")).toBe("••-•");
+    expect(maskCode("ABCDEF")).toBe("••••••");
+  });
+
+  it("never leaks a letter or digit from the original code", () => {
+    for (let i = 0; i < 200; i++) {
+      const code = generateResumeCode();
+      const masked = maskCode(code);
+      expect(masked).not.toMatch(/[A-Z0-9]/);
+      expect(masked.length).toBe(code.length);
+      expect(masked.indexOf("-")).toBe(code.indexOf("-"));
+    }
   });
 });
 

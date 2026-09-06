@@ -106,6 +106,27 @@ describe("report()", () => {
     expect(detail).not.toHaveProperty("list");
   });
 
+  it("reports a React error-boundary crash (app/error.tsx, app/global-error.tsx)", () => {
+    // React error boundaries bypass instrumentation-client.ts's window.onerror
+    // hook, so the boundaries call report() themselves on mount — this is the
+    // shape they send.
+    report("js_error", { boundary: "error", message: "Cannot read x of undefined", digest: "abcd1234" });
+    const p = sent();
+    expect(p.kind).toBe("js_error");
+    expect(p.detail).toEqual({
+      boundary: "error",
+      message: "Cannot read x of undefined",
+      digest: "abcd1234",
+    });
+  });
+
+  it("drops an undefined digest from the boundary report instead of sending it as null", () => {
+    report("js_error", { boundary: "global", message: "root layout crashed", digest: undefined });
+    const detail = sent().detail as Record<string, unknown>;
+    expect(detail).toEqual({ boundary: "global", message: "root layout crashed" });
+    expect(detail).not.toHaveProperty("digest");
+  });
+
   it("omits ids that are not UUIDs (a corrupt stored identity can't leak)", () => {
     store.set("ttt:player", JSON.stringify({ tournamentId: "abc", playerId: "" }));
     report("tab_passive", { gameId: "not-a-uuid" });
