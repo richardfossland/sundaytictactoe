@@ -446,6 +446,20 @@ a:focus-visible,
 .badge-done {
   color: var(--txt-dim);
 }
+/* Fair-play readout — a small marker next to a result badge when the game's
+   result_source wasn't ordinary play (walkover/override/timeout/absent). */
+.result-marker {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--warn) 22%, transparent);
+  color: var(--warn);
+  vertical-align: middle;
+}
 .banner {
   border-radius: 13px;
   padding: 15px 18px;
@@ -646,8 +660,11 @@ a:focus-visible,
 }
 .chip-kick {
   margin-left: 2px;
-  width: 20px;
-  height: 20px;
+  /* 32px min — the previous 20px circle was well under the ~44px touch-target
+     guideline; this is the largest it can go without the chip pill itself
+     growing awkwardly tall. */
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -663,6 +680,23 @@ a:focus-visible,
   color: #fff;
   background: var(--danger, #d4524e);
   border-color: var(--danger, #d4524e);
+}
+
+/* Projector / large-monitor type scale: standings + rosters are read from
+   across a classroom on this screen, not held in a hand — bump the body copy
+   past what's comfortable up close. (.game-grid's own board-shell bump at
+   this breakpoint lives further down, next to the rest of that layout.) */
+@media (min-width: 1500px) {
+  .table th {
+    font-size: 15px;
+  }
+  .table td {
+    font-size: 20px;
+  }
+  .chip {
+    font-size: 15px;
+    padding: 10px 18px 10px 11px;
+  }
 }
 
 /* generic round avatar */
@@ -836,6 +870,58 @@ a:focus-visible,
     width: min(46vw, 82vh, 1040px);
   }
 }
+/* Landscape phone: below this height the mobile single-column stack — timer,
+   turn banner, board, resign/draw, notice slot, move list, both side panels —
+   adds up to well over the available height, pushing resign/draw off the
+   bottom of the screen with no visible way to scroll to them. Go two columns
+   instead: the board stays put on the left, everything else moves to a
+   narrower column on the right, so the actions are a lot closer to the top of
+   that stack instead of the very end of one long one.
+   `.game-center` (a plain box, not a grid child of `.game-grid` today) is
+   flattened with `display: contents` so its own children — the round timer,
+   turn banner, board, resign/draw row, notice slot and move list — become
+   individually placeable grid items right alongside the two `.game-side`
+   panels. No JSX changes needed: same DOM, just re-laid-out. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .game-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 300px);
+    align-items: start;
+    gap: 6px 14px;
+    max-height: 100dvh;
+    overflow-y: auto;
+  }
+  .game-grid .game-center {
+    display: contents;
+  }
+  /* The board is the one piece that stays in the left column — centred
+     against the height of everything stacked in the right column, via a
+     span comfortably larger than that stack will ever be. */
+  .game-grid .board-frame {
+    grid-column: 1;
+    grid-row: span 20;
+    align-self: center;
+    justify-self: center;
+  }
+  .game-grid > *:not(.board-frame) {
+    grid-column: 2;
+  }
+}
+/* spectator/projector board — much larger on a big screen */
+.board-shell-lg {
+  width: min(82vw, 80vh, 820px);
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  /* L4: same reasoning as .board-shell — see there. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.board-shell-sm {
+  width: min(90vw, 360px);
+  aspect-ratio: 1;
+}
+
 /* ============ board grids (responsive) ============ */
 .board-grid {
   display: grid;
@@ -1269,6 +1355,9 @@ a:focus-visible,
 }
 
 /* ============ utility ============ */
+/* .visually-hidden lives with the modal styles further down (introduced
+   there for ConfirmDialog's dismissLabel) — RoundTimer's announcer reuses it
+   rather than defining a second copy. */
 .big-code {
   font-family: var(--mono);
   font-size: 32px;
@@ -1295,8 +1384,12 @@ a:focus-visible,
   right: 14px;
   bottom: 14px;
   z-index: 60;
-  width: 42px;
-  height: 42px;
+  /* 44px — was 42px at opacity 0.75 (sub-AA against the page and under the
+     ~44px touch-target guideline). Full opacity by default now too: a fixed
+     corner control that's only readable on hover doesn't work on a touch
+     device (no hover state at all). */
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1304,11 +1397,10 @@ a:focus-visible,
   background: color-mix(in srgb, var(--ink-soft) 80%, transparent);
   border: 1px solid var(--ink-line-strong);
   cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  opacity: 1;
+  transition: transform 0.15s ease;
 }
 .sound-toggle:hover {
-  opacity: 1;
   transform: scale(1.06);
 }
 /* Fullscreen toggle — same pill as the sound toggle, stacked just above it. */
@@ -1317,8 +1409,8 @@ a:focus-visible,
   right: 14px;
   bottom: 64px;
   z-index: 60;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1327,11 +1419,10 @@ a:focus-visible,
   border: 1px solid var(--ink-line-strong);
   color: inherit;
   cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  opacity: 1;
+  transition: transform 0.15s ease;
 }
 .fullscreen-toggle:hover {
-  opacity: 1;
   transform: scale(1.06);
 }
 /* Notify opt-in toggle — same pill, stacked above the fullscreen toggle.
@@ -1342,8 +1433,8 @@ a:focus-visible,
   right: 14px;
   bottom: 114px;
   z-index: 60;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1352,11 +1443,10 @@ a:focus-visible,
   border: 1px solid var(--ink-line-strong);
   color: inherit;
   cursor: pointer;
-  opacity: 0.75;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  opacity: 1;
+  transition: transform 0.15s ease;
 }
 .notify-toggle:hover {
-  opacity: 1;
   transform: scale(1.06);
 }
 
@@ -1661,4 +1751,130 @@ a:focus-visible,
   min-height: 44px;
   padding: 12px 14px;
   font-size: 13px;
+}
+
+/* ============ print (finished-screen recap) ============ */
+/* `.print-only` content (a plain title/date, the per-round pairings list) is
+   invisible on screen — the projector already shows the podium/table/awards
+   in their own styled form — and only appears once @media print flips it on.
+   `.no-print` is the opposite: fixed toolbars, toggles and confetti that make
+   no sense on paper. */
+.print-only {
+  display: none;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  /* Fixed-corner toolbars make no sense on paper. */
+  .sound-toggle,
+  .fullscreen-toggle,
+  .notify-toggle {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+  .center-screen {
+    min-height: 0;
+    display: block;
+    padding: 0;
+  }
+  .card {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+  }
+  .table th,
+  .table td {
+    border-bottom-color: #ccc !important;
+    color: #000 !important;
+  }
+  .table th {
+    color: #444 !important;
+  }
+  .rankpill {
+    background: #eee !important;
+    color: #000 !important;
+  }
+  /* Undo the gold gradient text-clip on the champion name — it prints as
+     invisible text (color: transparent) without this. */
+  .gold-text {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    -webkit-text-fill-color: #000 !important;
+    color: #000 !important;
+  }
+  a,
+  h1,
+  h2,
+  h3,
+  b,
+  .badge,
+  .eyebrow,
+  .muted,
+  .faint,
+  .result-marker,
+  .team-chip {
+    color: #000 !important;
+    background: none !important;
+  }
+  .badge,
+  .team-chip {
+    border-color: #999 !important;
+  }
+}
+
+/* ============ shared Modal primitive (lib/client/Modal.tsx) ============ */
+/* Default backdrop for a Modal that doesn't reuse an existing overlay class
+ * (CodesModal / OverrideModal / DiagnosticsModal) — same look those three
+ * already had inline. ConfirmDialog / PromotionPicker instead pass
+ * `overlayClassName="promo-overlay"` to keep reusing that one verbatim
+ * (different z-index/background — it must stay above this). */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 50;
+  animation: fadeIn 0.2s ease both;
+}
+.modal-sm {
+  max-width: 380px;
+}
+.modal-md {
+  max-width: 460px;
+}
+.modal-lg {
+  max-width: 720px;
+}
+.modal-footer {
+  margin-top: 4px;
+}
+/* Visually hidden but still announced — for a dialog's `aria-describedby`
+ * text that clarifies what Escape/backdrop does when that differs from its
+ * visible cancel/decline button (see ConfirmDialog's `dismissLabel`). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

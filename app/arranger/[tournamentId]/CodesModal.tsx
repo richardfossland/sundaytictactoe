@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
 import { maskCode } from "@/lib/codes";
 import { no } from "@/lib/locale/no";
+import { Modal } from "@/lib/client/Modal";
 
 /** Teacher-only roster of resume codes, so a student who lost their code can be
  * read it back. Fetched with the host code; never in the public board state.
@@ -63,89 +64,79 @@ export function CodesModal({
     }
   }
 
+  const titleId = useId();
+
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        backdropFilter: "blur(4px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 20,
-        zIndex: 50,
-      }}
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      cardClassName="card stack scale-in"
+      cardStyle={{ width: "100%", maxWidth: 460, maxHeight: "80vh", overflow: "auto" }}
     >
-      <div
-        className="card stack scale-in"
-        style={{ width: "100%", maxWidth: 460, maxHeight: "80vh", overflow: "auto" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ fontSize: 20 }}>{no.host.codesTitle}</h3>
-        <p className="muted" style={{ fontSize: 13 }}>{no.host.codesHint}</p>
-        <div className="banner banner-warn" style={{ fontSize: 13 }}>
-          ⚠️ {no.host.codesWarning}
-        </div>
-        <hr className="thread" />
-        {error ? (
-          <div className="stack" style={{ gap: 10 }}>
-            <div className="banner banner-error">{no.common.error}</div>
-            <button className="btn btn-primary" onClick={load}>
-              {no.common.retry}
-            </button>
-          </div>
-        ) : !rows ? (
-          <span className="spin" />
-        ) : (
-          <table className="table">
-            <tbody>
-              {rows.map((r) => {
-                const revealed = revealedId === r.playerId;
-                return (
-                  <tr key={r.playerId}>
-                    <td>{r.name}</td>
-                    <td className="num">
-                      <button
-                        type="button"
-                        className="mono"
-                        title={revealed ? no.host.tapToHide : no.host.tapToReveal}
-                        aria-label={`${r.name}: ${revealed ? r.resumeCode : no.host.tapToReveal}`}
-                        onClick={() => toggleReveal(r.playerId)}
-                        style={{
-                          background: "none",
-                          border: 0,
-                          padding: 0,
-                          cursor: "pointer",
-                          color: "var(--gold)",
-                          letterSpacing: "0.1em",
-                          fontWeight: 700,
-                          font: "inherit",
-                        }}
-                      >
-                        {revealed ? r.resumeCode : maskCode(r.resumeCode)}
-                      </button>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ padding: "6px 10px", fontSize: 12, minHeight: 0 }}
-                        onClick={() => copyCode(r.playerId, r.resumeCode)}
-                      >
-                        {copiedId === r.playerId ? no.common.copied : no.common.copy}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        <button className="btn btn-ghost btn-block" onClick={onClose}>
-          {no.common.close}
-        </button>
+      <h3 id={titleId} style={{ fontSize: 20 }}>{no.host.codesTitle}</h3>
+      <p className="muted" style={{ fontSize: 13 }}>{no.host.codesHint}</p>
+      <div className="banner banner-warn" style={{ fontSize: 13 }}>
+        ⚠️ {no.host.codesWarning}
       </div>
-    </div>
+      <hr className="thread" />
+      {error ? (
+        <div className="stack" style={{ gap: 10 }}>
+          <div className="banner banner-error">{no.common.error}</div>
+          <button className="btn btn-primary" onClick={load}>
+            {no.common.retry}
+          </button>
+        </div>
+      ) : !rows ? (
+        <span className="spin" />
+      ) : (
+        <table className="table">
+          <tbody>
+            {rows.map((r) => {
+              const revealed = revealedId === r.playerId;
+              return (
+                <tr key={r.playerId}>
+                  <td>{r.name}</td>
+                  <td className="num">
+                    <button
+                      type="button"
+                      className="mono"
+                      title={revealed ? no.host.tapToHide : no.host.tapToReveal}
+                      aria-label={`${r.name}: ${revealed ? r.resumeCode : no.host.tapToReveal}`}
+                      onClick={() => toggleReveal(r.playerId)}
+                      style={{
+                        background: "none",
+                        border: 0,
+                        padding: 0,
+                        cursor: "pointer",
+                        color: "var(--gold)",
+                        letterSpacing: "0.1em",
+                        fontWeight: 700,
+                        font: "inherit",
+                      }}
+                    >
+                      {revealed ? r.resumeCode : maskCode(r.resumeCode)}
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ padding: "6px 10px", fontSize: 12, minHeight: 0 }}
+                      onClick={() => copyCode(r.playerId, r.resumeCode)}
+                    >
+                      {copiedId === r.playerId ? no.common.copied : no.common.copy}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <button className="btn btn-ghost btn-block" onClick={onClose}>
+        {no.common.close}
+      </button>
+    </Modal>
   );
 }

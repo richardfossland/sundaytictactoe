@@ -38,6 +38,13 @@ export const no = {
     student: "Jeg spiller",
     studentSub: "Bli med med en PIN",
     versus: "Spill mot hverandre",
+    // "Slik funker det" 3-step strip + reassurance line on the landing page.
+    howTitle: "Slik funker det",
+    step1: "Lag turnering",
+    step2: "Elevene skanner QR eller taster PIN",
+    step3: "Følg tavla",
+    reassurance:
+      "Gratis · ingen elevkontoer · funker på Chromebook og mobil · ~20 min",
   },
 
   // OPTIONAL Sunday Account host login + "mine turneringer"-dashboard. Helt
@@ -98,6 +105,7 @@ export const no = {
     blackWon: "O vant!",
     draw: "Uavgjort",
     newGame: "Nytt parti",
+    newGameConfirm: "Starte nytt parti? Det pågående partiet blir borte.",
     rematch: "⚔︎ Omkamp",
     start: "Start",
     back: "Tilbake",
@@ -143,6 +151,10 @@ export const no = {
     bracketRecap: "Slik gikk det",
     roundOver: "Runden er ferdig!",
     backToArranging: "Tilbake til arrangering",
+    // LiveGamesView caps the projector grid at 8 boards by default (more than
+    // that per screen becomes unreadable) — this expands/collapses the rest.
+    showAllGames: (n: number) => `Vis alle (${n})`,
+    showFewerGames: "Vis færre",
     playRematch: "Spill omkamp",
     advanceBySeed: "Send høyest rangert videre",
     drawChoiceHint:
@@ -188,6 +200,10 @@ export const no = {
     join: "Bli med",
     liveToggle: "Live",
     boardToggle: "Tavle",
+    // SpectateGame's own back button — distinct from `liveToggle` above (that
+    // one SWITCHES a mode; this one LEAVES the single-game view for the grid),
+    // even though they used to share the same copy.
+    backToGames: "Alle partier",
     spectateWon: "vant!",
     spectateDraw: "Uavgjort",
     kick: "Kast ut",
@@ -207,6 +223,10 @@ export const no = {
     bracket: "Sluttspill",
     timer: "Rundetid",
     timeUp: "Tiden er ute",
+    // Screen-reader-only announcement (RoundTimer) — the visible countdown
+    // itself is aria-live="off" (it ticks every second; announcing every
+    // tick would be unusable), so this fires once, at the 60s mark.
+    timerOneMinuteLeft: "Ett minutt igjen",
     addMinute: "+1 min",
     timeUpSuggestion: "Tiden er ute – vil du avslutte runden?",
     endRound: "Avslutt runden",
@@ -218,6 +238,33 @@ export const no = {
     crownChampion: "Kår mester",
     allRoundGamesMustFinish: "Alle partier i runden må være ferdige.",
     noLiveGames: "Ingen partier pågår akkurat nå.",
+
+    // Finished-screen print / save-as-PDF (window.print()).
+    printResults: "Skriv ut / lagre som PDF",
+
+    // Fair-play readout — a game whose `result_source` isn't plain "play".
+    // Short marker shown next to the result badge in the results grid, plus
+    // its hover title. Keyed by ResultSource (see lib/types.ts); `resultSourceLabel`
+    // in lib/dto.ts looks these up so the mapping can't drift from the enum.
+    resultSourceLabel: {
+      walkover: "W.O.",
+      opponent_absent: "Fraværende",
+      teacher_override: "Overstyrt",
+      timeout_draw: "Tid ute",
+      bye: "Frirunde",
+    } as Record<string, string>,
+    resultSourceTitle: {
+      walkover: "Walkover — registrert av arrangøren uten at partiet ble spilt",
+      opponent_absent: "Motstanderen var borte — automatisk seier",
+      teacher_override: "Resultatet er satt manuelt av arrangøren",
+      timeout_draw: "Tiden løp ut i partiet — satt til remis",
+      bye: "Frirunde denne runden",
+    } as Record<string, string>,
+    // Compact legend on the finished screen: how many games were decided
+    // without play (walkover / fraværende / overstyrt) — a fair-play readout,
+    // not a comment on ordinary byes or time-forced draws.
+    resultSourceLegend: (n: number) =>
+      `${n} ${n === 1 ? "parti" : "partier"} avgjort uten spill (walkover/fravær/overstyring).`,
   },
 
   // Lærerens avlesning av klient-telemetrien (T5, port av sundaychess#87). Se
@@ -401,6 +448,13 @@ export const no = {
     accept: "Godta",
     decline: "Avslå",
     lineComplete: "Tre på rad",
+    // Ghost button in the notice slot while an incoming draw offer's dialog
+    // was dismissed (Esc/backdrop) without an answer — the offer is still
+    // pending, so this reopens the same dialog.
+    answerDrawOffer: "Svar på tilbudet om uavgjort",
+    // aria-describedby text on that dialog: Esc/backdrop only closes it
+    // (the offer stays pending) — declining is a separate, explicit button.
+    drawOfferDismissHint: "Esc eller klikk utenfor lukker uten å svare — tilbudet står fortsatt til du trykker Avslå eller Godta.",
     youWon: "Du vant! 🎉",
     youLost: "Du tapte",
     gameDraw: "Uavgjort",
@@ -487,6 +541,7 @@ export const no = {
     computer: "Datamaskinen",
     you: "Du",
     newGame: "Nytt parti",
+    newGameConfirm: "Starte nytt parti? Det pågående partiet blir borte.",
     undo: "Angre",
     back: "Tilbake",
     youWon: "Du vant!",

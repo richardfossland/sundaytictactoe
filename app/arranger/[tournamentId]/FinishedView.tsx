@@ -46,6 +46,25 @@ function gameWinner(g: PublicGame): string | null {
   return null;
 }
 
+// Compact per-round result, for the print-only recap below (no.host has no
+// entry for this — it's a plain chess score line, not prose).
+function printResultLabel(g: PublicGame): string {
+  switch (g.status) {
+    case "white_win":
+      return "1–0";
+    case "black_win":
+      return "0–1";
+    case "draw":
+      return "½–½";
+    case "bye":
+      return no.host.bye;
+    case "aborted":
+      return no.host.aborted;
+    default:
+      return no.host.inProgress;
+  }
+}
+
 export function FinishedView({ state }: { state: BoardState }) {
   const { standings, players, games, rounds, tournament } = state;
 
@@ -96,6 +115,23 @@ export function FinishedView({ state }: { state: BoardState }) {
     () => computeTeamStandings(tournament.config.teams ?? [], players),
     [tournament.config.teams, players],
   );
+  const teamById = useMemo(() => {
+    const m = new Map(players.map((p) => [p.id, p.team]));
+    return (id: string) => m.get(id) ?? null;
+  }, [players]);
+
+  // Fair-play readout: games decided without play (walkover/absent/override —
+  // NOT ordinary byes or time-forced draws, which aren't a fairness concern).
+  const nonPlayCount = useMemo(
+    () =>
+      games.filter(
+        (g) =>
+          g.resultSource === "walkover" ||
+          g.resultSource === "opponent_absent" ||
+          g.resultSource === "teacher_override",
+      ).length,
+    [games],
+  );
   // podium order: 2nd, 1st, 3rd  (champion centre, tallest)
   const top = standings.slice(0, 3);
   const order = [top[1], top[0], top[2]].filter(Boolean);
@@ -104,7 +140,21 @@ export function FinishedView({ state }: { state: BoardState }) {
 
   return (
     <main className="center-screen">
-      <Confetti />
+      {/* Confetti is a fixed, pointer-events-none canvas with no class of its
+          own — wrap it so @media print can hide it (it would otherwise just
+          render blank, but it's still dead weight on the page). */}
+      <div className="no-print">
+        <Confetti />
+      </div>
+
+      {/* Printed page only: a plain title + date the projector never shows. */}
+      <div className="print-only">
+        <h1 style={{ fontSize: 26, marginBottom: 2 }}>{tournament.title || no.appName}</h1>
+        <p style={{ fontSize: 13 }}>
+          {new Date().toLocaleDateString("no", { day: "2-digit", month: "long", year: "numeric" })}
+        </p>
+      </div>
+
       <div className="stack text-center" style={{ alignItems: "center", maxWidth: 680, gap: 18 }}>
         <span className="brandmark reveal" style={{ ["--i" as string]: 0 } as CSSProperties}>
           <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
@@ -119,7 +169,7 @@ export function FinishedView({ state }: { state: BoardState }) {
               🏆
             </div>
             <h1
-              className="scale-in"
+              className="scale-in gold-text"
               style={{ fontSize: "clamp(40px,9vw,80px)", background: "var(--gold-grad)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
             >
               {champion.displayName}
@@ -145,6 +195,61 @@ export function FinishedView({ state }: { state: BoardState }) {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Full results — the podium only shows the top 3; ranks 4+ still
+            matter to a class projecting this on the wall. */}
+        <div className="stack" style={{ alignItems: "stretch", gap: 10, marginTop: 22, width: "100%" }}>
+          <p className="eyebrow" style={{ textAlign: "center" }}>{no.host.standings}</p>
+          <div className="card" style={{ padding: 0, overflow: "hidden", textAlign: "left" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{no.host.rank}</th>
+                  <th>{no.host.name}</th>
+                  <th className="num">{no.host.score}</th>
+                  <th className="num" title={no.host.tiebreakHelp}>
+                    {no.host.tiebreak}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {standings.map((s) => (
+                  <tr key={s.playerId}>
+                    <td>
+                      <span className={`rankpill ${s.rank <= 3 ? "r" + s.rank : ""}`}>
+                        {s.rank}
+                      </span>
+                    </td>
+                    <td>
+                      {s.displayName}
+                      {teamById(s.playerId) && (
+                        <span
+                          className="team-dot"
+                          title={teamById(s.playerId) ?? ""}
+                          style={{
+                            background: teamColor(teamById(s.playerId) ?? ""),
+                            display: "inline-block",
+                            marginLeft: 7,
+                          }}
+                        />
+                      )}
+                    </td>
+                    <td className="num"><b>{s.score}</b></td>
+                    <td className="num muted">{s.tiebreak}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="faint" style={{ fontSize: 12, textAlign: "center" }}>
+            {no.host.tiebreakHelp}
+          </p>
+          {nonPlayCount > 0 && (
+            <p className="faint" style={{ fontSize: 12, textAlign: "center" }}>
+              {no.host.resultSourceLegend(nonPlayCount)}
+            </p>
+          )}
         </div>
 
         {teamRows.length > 0 && (
@@ -201,15 +306,55 @@ export function FinishedView({ state }: { state: BoardState }) {
 
         {/* how the knockout went — the full bracket path (cup / playoff only) */}
         {rounds.some((r) => r.phase === "playoff") && (
-          <div className="stack" style={{ alignItems: "center", gap: 10, marginTop: 18, width: "100%" }}>
+          <div className="stack no-print" style={{ alignItems: "center", gap: 10, marginTop: 18, width: "100%" }}>
             <p className="eyebrow">{no.host.bracketRecap}</p>
             <BracketBoard games={games} rounds={rounds} players={players} />
           </div>
         )}
 
-        <Link href="/arranger" className="btn btn-primary btn-lg" style={{ marginTop: 28 }}>
-          {no.host.newTournament} →
-        </Link>
+        {/* Printed page only: per-round pairings + results (the bracket board
+            above is a canvas-y interactive widget, cheap to skip on paper —
+            this plain list is the "if cheap" per-round recap instead). */}
+        <div className="print-only" style={{ marginTop: 18, width: "100%" }}>
+          <p className="eyebrow">{no.host.games}</p>
+          {rounds
+            .slice()
+            .sort((a, b) => a.number - b.number || (a.phase === "playoff" ? 1 : -1))
+            .map((r) => {
+              const roundGames = games.filter((g) => g.roundId === r.id);
+              if (roundGames.length === 0) return null;
+              return (
+                <div key={r.id} style={{ marginTop: 10 }}>
+                  <b>
+                    {no.host.round} {r.number}
+                    {r.phase === "playoff" ? ` · ${no.host.bracket}` : ""}
+                  </b>
+                  <ul style={{ marginTop: 4, paddingLeft: 18 }}>
+                    {roundGames.map((g) => (
+                      <li key={g.id} style={{ fontSize: 13 }}>
+                        {nameById(g.whitePlayerId)}
+                        {g.blackPlayerId ? ` – ${nameById(g.blackPlayerId)}` : ""}:{" "}
+                        {printResultLabel(g)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+        </div>
+
+        <div className="row no-print" style={{ marginTop: 28, gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+          <Link href="/arranger" className="btn btn-primary btn-lg">
+            {no.host.newTournament} →
+          </Link>
+          <button
+            type="button"
+            className="btn btn-ghost btn-lg"
+            onClick={() => window.print()}
+          >
+            🖨️ {no.host.printResults}
+          </button>
+        </div>
       </div>
 
       <SoundToggle />

@@ -18,6 +18,8 @@ export function SoundToggle() {
       className="sound-toggle"
       aria-label={muted ? no.common.soundOn : no.common.soundOff}
       title={muted ? no.common.soundOn : no.common.soundOff}
+      // Pressed = sound is currently OFF (the state this button's action toggles).
+      aria-pressed={muted}
       onClick={() => {
         const next = sound.toggle();
         setMuted(next);

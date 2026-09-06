@@ -45,6 +45,7 @@ export function FullscreenToggle() {
       className="fullscreen-toggle"
       aria-label={isFull ? no.common.fullscreenExit : no.common.fullscreenEnter}
       title={isFull ? no.common.fullscreenExit : no.common.fullscreenEnter}
+      aria-pressed={isFull}
       onClick={toggle}
     >
       {isFull ? "🡼" : "⛶"}

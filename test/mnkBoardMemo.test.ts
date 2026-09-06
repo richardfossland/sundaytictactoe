@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arePropsEqual, type MnkBoardProps } from "@/lib/client/MnkBoard";
+import { arePropsEqual, describeWinLine, type MnkBoardProps } from "@/lib/client/MnkBoard";
 
 // L5 port (sundaychess#84): <MnkBoard> is the memo boundary that stops its
 // callers' re-renders (polls, presence events, toasts, the `pending` flip)
@@ -90,5 +90,30 @@ describe("MnkBoard arePropsEqual", () => {
       expect(arePropsEqual(props(over), props(over))).toBe(true); // equal to itself
       expect(arePropsEqual(props(), props(over))).toBe(false); // but not to the base
     }
+  });
+});
+
+// TTT-specific a11y addition (UX audit #13/#31): a visually-hidden aria-live
+// region announces "✕ vant med rad 2" when a win lands. describeWinLine is the
+// pure part of that message — which line, in words a screen reader reads out.
+describe("describeWinLine", () => {
+  it("names a row win by its 1-based row number", () => {
+    // 3×3 board, cells 3/4/5 — the middle row.
+    expect(describeWinLine([3, 4, 5], 3)).toBe("rad 2");
+  });
+
+  it("names a column win by its 1-based column number", () => {
+    // 3×3 board, cells 1/4/7 — the middle column.
+    expect(describeWinLine([1, 4, 7], 3)).toBe("kolonne 2");
+  });
+
+  it("names a diagonal win as 'diagonal' (no single row or column)", () => {
+    expect(describeWinLine([0, 4, 8], 3)).toBe("diagonal");
+    expect(describeWinLine([2, 4, 6], 3)).toBe("diagonal");
+  });
+
+  it("scales the row/column index with a non-square board (m,n,k variant)", () => {
+    // 5-wide board: cells 10..13 are row 3 (0-based row 2), columns 1..4.
+    expect(describeWinLine([10, 11, 12, 13], 5)).toBe("rad 3");
   });
 });

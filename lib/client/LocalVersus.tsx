@@ -5,6 +5,7 @@ import { applyMove } from "@/lib/ttt/validateMove";
 import { findWinLine } from "@/lib/ttt/win";
 import { VARIANTS, variantStartState, type MnkVariant } from "@/lib/ttt/variants";
 import { Confetti } from "@/lib/client/Confetti";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 import { MnkBoard } from "@/lib/client/MnkBoard";
 import { SoundToggle } from "@/lib/client/SoundToggle";
 import { sound } from "@/lib/client/sound";
@@ -21,6 +22,10 @@ export function LocalVersus({ onExit }: { onExit: () => void }) {
   const [history, setHistory] = useState<string[]>([]);
   const [lastCell, setLastCell] = useState<number | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // "Nytt parti" mid-game asks first — only when there's an actual game in
+  // progress to lose (newGame() below resets the board with no way back).
+  // Port of sundaychess#107.
+  const [confirmNewGame, setConfirmNewGame] = useState(false);
 
   const filled = [...state].filter((c) => c !== ".").length;
   const turn: Turn = filled % 2 === 0 ? "w" : "b";
@@ -132,10 +137,13 @@ export function LocalVersus({ onExit }: { onExit: () => void }) {
         </div>
 
         <div className="row">
-          <button className="btn btn-ghost" onClick={undo}>
+          <button className="btn btn-ghost" onClick={undo} disabled={history.length === 0}>
             ↶ {no.solo.undo}
           </button>
-          <button className="btn" onClick={() => newGame()}>
+          <button
+            className="btn"
+            onClick={() => (history.length > 0 ? setConfirmNewGame(true) : newGame())}
+          >
             {no.versus.newGame}
           </button>
           <button className="btn btn-ghost" onClick={onExit}>
@@ -143,6 +151,18 @@ export function LocalVersus({ onExit }: { onExit: () => void }) {
           </button>
         </div>
       </div>
+
+      {confirmNewGame && (
+        <ConfirmDialog
+          message={no.versus.newGameConfirm}
+          confirmLabel={no.versus.newGame}
+          onConfirm={() => {
+            setConfirmNewGame(false);
+            newGame();
+          }}
+          onCancel={() => setConfirmNewGame(false)}
+        />
+      )}
 
       {outcome && (
         <div className="result-overlay">

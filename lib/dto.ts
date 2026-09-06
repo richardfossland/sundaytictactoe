@@ -5,12 +5,14 @@ import type {
   Game,
   GameStatus,
   Player,
+  ResultSource,
   Tournament,
   TournamentConfig,
   TournamentStatus,
   Turn,
 } from "@/lib/types";
 import type { StandingRow } from "@/lib/tournament/score";
+import { no } from "@/lib/locale/no";
 
 export type { StandingRow };
 
@@ -37,6 +39,12 @@ export interface PublicGame {
   pgn?: string;
   /** Bracket/pairing position within the round (0 for pre-0007 rows). */
   slot?: number;
+  /** Fair-play readout — present only for a DECIDED game (mirrors the same
+   * `decided` gate as `pgn`), so the board poll can show a "non-standard
+   * result" marker without a separate fetch. "play" means an ordinary
+   * completed game; anything else (walkover, teacher_override, timeout_draw,
+   * opponent_absent) is worth flagging. Absent/undefined for a live game. */
+  resultSource?: ResultSource;
 }
 
 export interface BoardState {
@@ -91,7 +99,18 @@ export function toPublicGame(g: Game): PublicGame {
     turn: g.turn,
     slot: g.slot ?? 0,
     ...(decided && g.pgn ? { pgn: g.pgn } : {}),
+    ...(decided && g.result_source ? { resultSource: g.result_source } : {}),
   };
+}
+
+/** Short marker text for a fair-play `resultSource` ("" for ordinary "play",
+ * a live game's `undefined`/`null`, or an unmapped value). Pure — a lookup
+ * into `no.host.resultSourceLabel`, kept here so it can't drift from the
+ * `ResultSource` union and so both LeagueView and FinishedView share one
+ * mapping. */
+export function resultSourceLabel(source: ResultSource | null | undefined): string {
+  if (!source || source === "play") return "";
+  return no.host.resultSourceLabel[source] ?? "";
 }
 
 export interface GameDetail {

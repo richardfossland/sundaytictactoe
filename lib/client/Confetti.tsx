@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useReducedMotion } from "@/lib/client/useReducedMotion";
 
 // Lightweight canvas confetti — no dependencies. Fires a celebratory burst in
 // the suite's gold/cream palette, then fades. Used on the podium + student win.
@@ -8,8 +9,14 @@ const COLORS = ["#ebb84b", "#f6dd97", "#faf7f0", "#d4a23a", "#ffffff"];
 
 export function Confetti({ count = 140 }: { count?: number }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  // The canvas rAF loop below never sees globals.css's own
+  // `prefers-reduced-motion` block (that only touches CSS transitions/
+  // animations) — 200 frames of drifting shapes is exactly the kind of motion
+  // that setting asks to suppress, so skip the effect and render nothing.
+  const reduced = useReducedMotion();
 
   useEffect(() => {
+    if (reduced) return;
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -65,7 +72,9 @@ export function Confetti({ count = 140 }: { count?: number }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [count]);
+  }, [count, reduced]);
+
+  if (reduced) return null;
 
   return (
     <canvas

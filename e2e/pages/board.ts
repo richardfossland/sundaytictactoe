@@ -4,7 +4,7 @@ import { no } from "@/lib/locale/no";
 
 // The player's board, addressed the way the DOM actually exposes it.
 //
-// MnkBoard (lib/client/MnkBoard.tsx) renders a `role="grid"` of
+// MnkBoard (lib/client/MnkBoard.tsx) renders a labelled `role="group"` of
 // `<button class="mnk-cell">`, one per cell, each carrying `data-cell="<index>"`
 // and `data-mark="x" | "o" | ""`. Those two attributes are the whole contract
 // this page object needs — no class names, no aria-label copy, nothing that a

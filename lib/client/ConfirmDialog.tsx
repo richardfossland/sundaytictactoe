@@ -1,63 +1,74 @@
 "use client";
 
-import { useEffect } from "react";
+import { useId } from "react";
 import { no } from "@/lib/locale/no";
+import { Modal } from "@/lib/client/Modal";
 
 /** Themed yes/no dialog — a touch-friendly, on-brand replacement for the
  * browser's window.confirm (which renders as a tiny OS popup, easy to miss on a
- * projector / Chromebook). Enter = confirm, Esc / backdrop = cancel. The confirm
- * button is autofocused. */
+ * projector / Chromebook). The confirm button is autofocused, so Enter already
+ * confirms via the button — no separate global binding. Esc / backdrop click
+ * dismiss (see `onDismiss` below). */
 export function ConfirmDialog({
   message,
   confirmLabel = no.common.confirm,
   cancelLabel = no.common.cancel,
+  dismissLabel,
   danger = false,
   onConfirm,
   onCancel,
+  onDismiss,
 }: {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Extra `aria-describedby` text for when Escape/backdrop does something
+   * DIFFERENT from the visible cancel/decline button — e.g. GameView's draw
+   * offer, where Escape leaves the offer pending instead of declining it.
+   * Purely descriptive; renders visually hidden. */
+  dismissLabel?: string;
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Escape / backdrop-click handler. Defaults to `onCancel` so existing
+   * callers (resign, host overrides) keep "dismiss == cancel". Pass a
+   * distinct handler when dismissing must NOT be the same as the explicit
+   * cancel/decline button. */
+  onDismiss?: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        onConfirm();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onConfirm, onCancel]);
+  const dismiss = onDismiss ?? onCancel;
+  const msgId = useId();
+  const hintId = useId();
 
   return (
-    <div
-      className="promo-overlay"
-      role="dialog"
-      aria-modal="true"
-      onClick={onCancel}
+    <Modal
+      open
+      onClose={dismiss}
+      labelledBy={msgId}
+      describedBy={dismissLabel ? hintId : undefined}
+      overlayClassName="promo-overlay"
+      cardClassName="confirm-card"
     >
-      <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
-        <p className="confirm-msg">{message}</p>
-        <div className="row" style={{ justifyContent: "center" }}>
-          <button
-            className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
-            autoFocus
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </button>
-          <button className="btn btn-ghost" onClick={onCancel}>
-            {cancelLabel}
-          </button>
-        </div>
+      <p id={msgId} className="confirm-msg">
+        {message}
+      </p>
+      {dismissLabel && (
+        <p id={hintId} className="visually-hidden">
+          {dismissLabel}
+        </p>
+      )}
+      <div className="row" style={{ justifyContent: "center" }}>
+        <button
+          className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
+          autoFocus
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </button>
+        <button className="btn btn-ghost" onClick={onCancel}>
+          {cancelLabel}
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }
