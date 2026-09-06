@@ -1,5 +1,5 @@
 import { getGame, getPlayer } from "@/lib/server/store";
-import { fail, ok } from "@/lib/server/http";
+import { fail, ok, rateLimit, clientIp } from "@/lib/server/http";
 import { isUuid } from "@/lib/codes";
 import type { GameDetail } from "@/lib/dto";
 
@@ -26,7 +26,7 @@ export async function GET(
 }
 
 async function handleGet(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
@@ -34,6 +34,13 @@ async function handleGet(
   // `.eq("id", id)` throws 22P02 in Postgres. Answer the same "no_game" a
   // genuinely missing id gets, rather than letting the query throw into 503.
   if (!isUuid(id)) return fail(404, "no_game");
+
+  // H4: the hot poll — every connected client hits this every 5s. Same generous
+  // bound as GET /api/tournament/[id] (see that route's comment).
+  if (!rateLimit(`board:${clientIp(req)}`, 600, 60_000)) {
+    return fail(429, "rate_limited");
+  }
+
   const game = await getGame(id);
   if (!game) return fail(404, "no_game");
 

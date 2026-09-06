@@ -16,6 +16,20 @@ vi.mock("@/lib/server/broadcast", () => ({
   broadcast: (...a: unknown[]) => broadcast(...a),
 }));
 
+// M1: the roster nudge is handed to defer() and runs after the response.
+const { deferred } = vi.hoisted(() => ({
+  deferred: [] as Array<() => Promise<void>>,
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
+
 import { POST } from "@/app/api/lobby/kick/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
@@ -62,6 +76,7 @@ const good = { tournamentId: T_ID, hostCode: HOST, playerId: P_ID };
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  deferred.length = 0;
   getTournament.mockResolvedValue(tournament());
   getPlayer.mockResolvedValue(player());
   setPlayerStatus.mockResolvedValue(undefined);
@@ -69,11 +84,13 @@ beforeEach(() => {
 });
 
 describe("POST /api/lobby/kick", () => {
-  it("removes the player and tells the roster", async () => {
+  it("removes the player and tells the roster after responding (M1)", async () => {
     const res = await POST(req(good));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(setPlayerStatus).toHaveBeenCalledWith(P_ID, "left");
+    expect(broadcast).not.toHaveBeenCalled();
+    await drainDeferred();
     expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "roster", { left: P_ID });
   });
 

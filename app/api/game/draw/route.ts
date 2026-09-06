@@ -4,7 +4,7 @@ import { afterGameResolved } from "@/lib/server/gameEvents";
 import { broadcast } from "@/lib/server/broadcast";
 import { defer } from "@/lib/server/defer";
 import { channels } from "@/lib/realtime";
-import { fail, ok, readJson } from "@/lib/server/http";
+import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
 import { isUuid } from "@/lib/codes";
 
 // POST /api/game/draw — draw by agreement, with the pending offer stored in the
@@ -32,6 +32,12 @@ async function handlePost(req: Request): Promise<Response> {
   if (!body?.gameId || !body.action) return fail(400, "bad_request");
   // A malformed gameId is a client error, not an outage (22P02 → false 503).
   if (!isUuid(body.gameId)) return fail(400, "bad_request");
+
+  // H4: bound player-action bursts per IP (a whole classroom shares one NAT
+  // IP, so this is generous — well above any real click rate).
+  if (!rateLimit(`gameact:${clientIp(req)}`, 120, 60_000)) {
+    return fail(429, "rate_limited");
+  }
 
   const player = await authPlayer(body.playerId, body.resumeCode);
   if (!player) return fail(401, "unauthorized");

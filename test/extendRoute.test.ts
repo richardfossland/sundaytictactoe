@@ -15,7 +15,24 @@ vi.mock("@/lib/server/store", () => ({
   extendRoundRpc: (...a: unknown[]) => extendRoundRpc(...a),
   setRoundStartedAt: (...a: unknown[]) => setRoundStartedAt(...a),
 }));
-vi.mock("@/lib/server/broadcast", () => ({ broadcast: vi.fn() }));
+const broadcast = vi.fn();
+vi.mock("@/lib/server/broadcast", () => ({
+  broadcast: (...a: unknown[]) => broadcast(...a),
+}));
+
+// M1: the timer nudge is handed to defer() and runs after the response.
+const { deferred } = vi.hoisted(() => ({
+  deferred: [] as Array<() => Promise<void>>,
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
 
 import { POST } from "@/app/api/round/extend/route";
 import { __resetRateLimiter } from "@/lib/server/http";
@@ -48,6 +65,8 @@ function req(body: unknown = { tournamentId: T_ID, hostCode: HOST }): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  deferred.length = 0;
+  broadcast.mockResolvedValue(undefined);
   getTournament.mockResolvedValue(tournament());
   listRounds.mockResolvedValue([
     {
@@ -62,7 +81,7 @@ beforeEach(() => {
 });
 
 describe("POST /api/round/extend", () => {
-  it("uses the atomic RPC and leaves started_at alone", async () => {
+  it("uses the atomic RPC, leaves started_at alone, and defers the nudge (M1)", async () => {
     extendRoundRpc.mockResolvedValue(120_000);
     const res = await POST(req());
     expect(res.status).toBe(200);
@@ -70,6 +89,11 @@ describe("POST /api/round/extend", () => {
     expect(extendRoundRpc).toHaveBeenCalledWith("r1");
     // the whole point: chess-clock t0 (started_at) must NOT move
     expect(setRoundStartedAt).not.toHaveBeenCalled();
+    expect(broadcast).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "tournament", {
+      timerExtended: "r1",
+    });
   });
 
   it("falls back to shifting started_at when 0007 is not migrated", async () => {

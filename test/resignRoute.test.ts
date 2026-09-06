@@ -7,8 +7,10 @@ const getPlayer = vi.fn();
 const resolveGameRpc = vi.fn();
 const afterGameResolved = vi.fn();
 
-const { deferred } = vi.hoisted(() => ({
+const { deferred, rateLimitMock } = vi.hoisted(() => ({
   deferred: [] as Array<() => Promise<void>>,
+  // H4: the per-IP gameact rate limiter, mocked so we can force a 429.
+  rateLimitMock: vi.fn().mockReturnValue(true),
 }));
 
 vi.mock("@/lib/server/store", () => ({
@@ -24,6 +26,10 @@ vi.mock("@/lib/server/defer", () => ({
     deferred.push(task);
   },
 }));
+vi.mock("@/lib/server/http", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/server/http")>();
+  return { ...actual, rateLimit: (...a: unknown[]) => rateLimitMock(...a) };
+});
 
 async function drainDeferred(): Promise<void> {
   const queue = deferred.splice(0);
@@ -78,6 +84,7 @@ const good = { gameId: G_ID, playerId: WHITE, resumeCode: "AAAA-AA" };
 beforeEach(() => {
   vi.clearAllMocks();
   deferred.length = 0;
+  rateLimitMock.mockReturnValue(true);
   getGame.mockResolvedValue(game());
   getPlayer.mockImplementation(async (id: string) => player(id));
   resolveGameRpc.mockResolvedValue({ ok: true });
@@ -85,6 +92,16 @@ beforeEach(() => {
 });
 
 describe("POST /api/game/resign", () => {
+  // H4: bounds player-action bursts per IP; checked before auth even runs.
+  it("429s when the per-IP gameact bound is exceeded", async () => {
+    rateLimitMock.mockReturnValueOnce(false);
+    const res = await POST(req(good));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+    expect(getPlayer).not.toHaveBeenCalled();
+    expect(getGame).not.toHaveBeenCalled();
+  });
+
   it("gives the win to the OTHER side and scores after responding", async () => {
     const res = await POST(req(good));
     expect(res.status).toBe(200);

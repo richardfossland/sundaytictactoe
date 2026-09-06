@@ -1,6 +1,7 @@
 import { authHost } from "@/lib/server/auth";
 import { getPlayer, setPlayerStatus } from "@/lib/server/store";
 import { broadcast } from "@/lib/server/broadcast";
+import { defer } from "@/lib/server/defer";
 import { channels, events } from "@/lib/realtime";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 import { isUuid } from "@/lib/codes";
@@ -40,6 +41,11 @@ async function handlePost(req: Request): Promise<Response> {
   if (!player || player.tournament_id !== t.id) return fail(404, "no_player");
 
   await setPlayerStatus(player.id, "left");
-  await broadcast(channels.lobby(t.id), events.roster, { left: player.id });
+  // M1: the roster nudge is a hint layer, so it runs after the response (see
+  // lib/server/defer.ts).
+  defer(
+    () => broadcast(channels.lobby(t.id), events.roster, { left: player.id }),
+    "kick:roster",
+  );
   return ok({ ok: true });
 }

@@ -17,6 +17,20 @@ vi.mock("@/lib/server/gameEvents", () => ({
   afterGameResolved: (...a: unknown[]) => afterGameResolved(...a),
 }));
 
+// M1: scoring + broadcasts are handed to defer() and run after the response.
+const { deferred } = vi.hoisted(() => ({
+  deferred: [] as Array<() => Promise<void>>,
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
+
 import { POST } from "@/app/api/game/override/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
@@ -65,6 +79,7 @@ const good = { gameId: G_ID, hostCode: HOST, result: "white_win" };
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  deferred.length = 0;
   getGame.mockResolvedValue(game());
   getTournament.mockResolvedValue(tournament());
   resolveGameRpc.mockResolvedValue({ ok: true });
@@ -72,11 +87,15 @@ beforeEach(() => {
 });
 
 describe("POST /api/game/override", () => {
-  it("sets the result from the board", async () => {
+  it("sets the result and scores/broadcasts after responding (M1)", async () => {
     const res = await POST(req(good));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "white_win" });
     expect(resolveGameRpc).toHaveBeenCalledWith(G_ID, "white_win", "teacher_override");
+    expect(afterGameResolved).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(afterGameResolved).toHaveBeenCalledOnce();
+    expect(afterGameResolved.mock.calls[0].slice(1)).toEqual(["white_win", "teacher_override"]);
   });
 
   // H2: getGame hands the id straight to Postgres — 22P02 used to surface as a

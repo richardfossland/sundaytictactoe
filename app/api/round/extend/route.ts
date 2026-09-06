@@ -1,6 +1,7 @@
 import { authHost } from "@/lib/server/auth";
 import { extendRoundRpc, listRounds, setRoundStartedAt } from "@/lib/server/store";
 import { broadcast } from "@/lib/server/broadcast";
+import { defer } from "@/lib/server/defer";
 import { channels, events } from "@/lib/realtime";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 
@@ -38,7 +39,12 @@ async function handlePost(req: Request): Promise<Response> {
     const next = new Date(new Date(cur.started_at).getTime() + 60_000).toISOString();
     await setRoundStartedAt(cur.id, next);
   }
-  await broadcast(channels.lobby(t.id), events.tournament, { timerExtended: cur.id });
+  // M1: the extension is committed either way above; the nudge is a hint layer,
+  // so it runs after the response (see lib/server/defer.ts).
+  defer(
+    () => broadcast(channels.lobby(t.id), events.tournament, { timerExtended: cur.id }),
+    "extend:roster",
+  );
 
   return ok({ extendedMs });
 }

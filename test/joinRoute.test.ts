@@ -13,6 +13,20 @@ vi.mock("@/lib/server/broadcast", () => ({
   broadcast: (...a: unknown[]) => broadcast(...a),
 }));
 
+// M1: the roster nudge is handed to defer() and runs after the response.
+const { deferred } = vi.hoisted(() => ({
+  deferred: [] as Array<() => Promise<void>>,
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
+
 import { POST } from "@/app/api/join/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
@@ -57,13 +71,14 @@ const good = { pin: "123456", displayName: "Ada" };
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  deferred.length = 0;
   getTournamentByPin.mockResolvedValue(tournament());
   addPlayer.mockResolvedValue(player());
   broadcast.mockResolvedValue(undefined);
 });
 
 describe("POST /api/join", () => {
-  it("joins and returns the bearer identity in the BODY", async () => {
+  it("joins and returns the bearer identity in the BODY; roster nudge deferred (M1)", async () => {
     const res = await POST(req(good));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -72,6 +87,11 @@ describe("POST /api/join", () => {
       resumeCode: "KOLE-7F",
       displayName: "Ada",
       team: null,
+    });
+    expect(broadcast).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "roster", {
+      joined: "33333333-3333-4333-8333-333333333333",
     });
   });
 

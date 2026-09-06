@@ -5,7 +5,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { no } from "@/lib/locale/no";
 import { api, ApiError } from "@/lib/client/api";
-import { Wizard } from "./Wizard";
+import { identity } from "@/lib/client/identity";
+import { defaultConfig, Wizard } from "./Wizard";
+
+/** "Turnering DD.MM" — the auto-title "Rask start" gives a tournament created
+ * without visiting the title step. */
+function autoTitle(): string {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  return `${no.host.quickStartTitlePrefix} ${dd}.${mm}`;
+}
 
 export default function HostEntry() {
   const router = useRouter();
@@ -16,6 +26,8 @@ export default function HostEntry() {
   const [hostCode, setHostCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
 
   async function open() {
     setBusy(true);
@@ -38,6 +50,23 @@ export default function HostEntry() {
     }
   }
 
+  // Creates a tournament immediately with the wizard's defaults (league, 5
+  // rounds, no playoff, no round timer, no clock, reactions off, individual,
+  // standard) — the same create call the wizard's review step uses, just
+  // skipping the 10-11 steps for a host who wants to start right away.
+  async function quickStart() {
+    setQuickBusy(true);
+    setQuickError(null);
+    try {
+      const t = await api.createTournament(defaultConfig(autoTitle()));
+      identity.saveHostCode(t.id, t.hostCode);
+      router.push(`/arranger/${t.id}`);
+    } catch {
+      setQuickError(no.common.error);
+      setQuickBusy(false);
+    }
+  }
+
   return (
     <main className="center-screen">
       <div className="card card-narrow stack scale-in">
@@ -50,9 +79,17 @@ export default function HostEntry() {
             <p className="eyebrow text-center">{no.host.arrangerEyebrow}</p>
             <button
               className="btn btn-primary btn-block btn-lg"
+              disabled={quickBusy}
+              onClick={quickStart}
+            >
+              {quickBusy ? <span className="spin" /> : `⚡ ${no.host.quickStart}`}
+            </button>
+            {quickError && <div className="banner banner-error">{quickError}</div>}
+            <button
+              className="btn btn-block btn-lg"
               onClick={() => setMode("create")}
             >
-              {no.host.createTitle}
+              {no.host.customize}
             </button>
             <button
               className="btn btn-block btn-lg"
