@@ -11,7 +11,9 @@ const store = new Map<string, string>();
 /** The module is a browser module: it no-ops unless `window` exists. Build the
  * smallest environment that makes it run (and a localStorage so `identity`
  * behaves as it does in a real tab). */
-function installBrowser(opts: { coarsePointer?: boolean; touchPoints?: number } = {}) {
+function installBrowser(
+  opts: { coarsePointer?: boolean; touchPoints?: number; path?: string } = {},
+) {
   const localStorage = {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
@@ -19,6 +21,9 @@ function installBrowser(opts: { coarsePointer?: boolean; touchPoints?: number } 
   };
   vi.stubGlobal("window", {
     localStorage,
+    // Which screen the beacon fires from decides whether it may carry the
+    // student's ids at all — see the attribution block below.
+    location: { pathname: opts.path ?? "/play" },
     matchMedia: (q: string) => ({ matches: !!opts.coarsePointer && q.includes("coarse") }),
   });
   vi.stubGlobal("navigator", {
@@ -40,12 +45,40 @@ function rawBody(n = 0): string {
   return body as string;
 }
 
-import { report, uaClass, apiKind, errDetail, __resetTelemetry } from "@/lib/client/telemetry";
+import {
+  report,
+  uaClass,
+  apiKind,
+  errDetail,
+  withIdentity,
+  __resetTelemetry,
+} from "@/lib/client/telemetry";
 import { ApiError } from "@/lib/client/api";
 
 const TID = "11111111-1111-4111-8111-111111111111";
 const PID = "22222222-2222-4222-9222-222222222222";
 const GID = "33333333-3333-4333-a333-333333333333";
+/** A second tournament stored on the same device — the R6 layout allows it. */
+const TID2 = "44444444-4444-4444-8444-444444444444";
+const PID2 = "55555555-5555-4555-9555-555555555555";
+
+/** Write a session the way lib/client/identity.ts does: one record per
+ *  tournament, plus the pointer the bare `/play` entry follows. */
+function seedSession(p: {
+  tournamentId: string;
+  playerId: string;
+  resumeCode?: string;
+  displayName?: string;
+}) {
+  store.set(
+    `ttt:player:${p.tournamentId}`,
+    JSON.stringify({ resumeCode: "KOLE-7F", displayName: "Ada", ...p }),
+  );
+  store.set("ttt:player:last", p.tournamentId);
+  const index = new Set<string>(JSON.parse(store.get("ttt:player:index") ?? "[]"));
+  index.add(p.tournamentId);
+  store.set("ttt:player:index", JSON.stringify([...index]));
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -53,15 +86,7 @@ beforeEach(() => {
   sendBeacon.mockClear();
   sendBeacon.mockReturnValue(true);
   store.clear();
-  store.set(
-    "ttt:player",
-    JSON.stringify({
-      tournamentId: TID,
-      playerId: PID,
-      resumeCode: "KOLE-7F",
-      displayName: "Ada",
-    }),
-  );
+  seedSession({ tournamentId: TID, playerId: PID, resumeCode: "KOLE-7F", displayName: "Ada" });
   __resetTelemetry();
   installBrowser();
 });
@@ -128,7 +153,8 @@ describe("report()", () => {
   });
 
   it("omits ids that are not UUIDs (a corrupt stored identity can't leak)", () => {
-    store.set("ttt:player", JSON.stringify({ tournamentId: "abc", playerId: "" }));
+    store.clear();
+    seedSession({ tournamentId: "abc", playerId: "nope" });
     report("tab_passive", { gameId: "not-a-uuid" });
     const p = sent();
     expect(p.tournamentId).toBeUndefined();
@@ -192,6 +218,80 @@ describe("report()", () => {
       throw new Error("blocked too");
     });
     expect(() => report("kick", { reason: "logout" })).not.toThrow();
+  });
+});
+
+describe("attribution (R6)", () => {
+  const SESSION_KINDS = [
+    "kick",
+    "watchdog",
+    "channel_error",
+    "api_timeout",
+    "api_network",
+    "api_5xx",
+    "move_rollback",
+    "game_vanished",
+    "tab_passive",
+  ] as const;
+
+  it("stamps the ids on session events fired from /play", () => {
+    for (const kind of SESSION_KINDS) {
+      expect(withIdentity(kind)).toBe(true);
+      report(kind, { n: kind });
+    }
+    expect(sendBeacon).toHaveBeenCalledTimes(SESSION_KINDS.length);
+    for (let i = 0; i < SESSION_KINDS.length; i++) {
+      expect(sent(i).tournamentId, SESSION_KINDS[i]).toBe(TID);
+      expect(sent(i).playerId, SESSION_KINDS[i]).toBe(PID);
+    }
+  });
+
+  it("never stamps them on js_error — it fires from every screen in the app", () => {
+    expect(withIdentity("js_error")).toBe(false);
+    report("js_error", { boundary: "error", message: "boom" });
+    const p = sent();
+    expect(p.tournamentId).toBeUndefined();
+    expect(p.playerId).toBeUndefined();
+    // …and the event itself is still reported. Anonymous, not dropped.
+    expect(p.kind).toBe("js_error");
+    expect(p.detail).toEqual({ boundary: "error", message: "boom" });
+  });
+
+  it("stamps nothing from /solo, /versus or /arranger, whatever the kind", () => {
+    for (const path of ["/solo", "/versus", "/arranger/abc", "/"]) {
+      sendBeacon.mockClear();
+      __resetTelemetry();
+      installBrowser({ path });
+      report("channel_error", { status: "TIMED_OUT" });
+      const p = sent();
+      expect(p.tournamentId, path).toBeUndefined();
+      expect(p.playerId, path).toBeUndefined();
+    }
+  });
+
+  it("uses the tournament the event NAMES, not the last one joined", () => {
+    // Two sessions on one device (a shared classroom iPad). The pointer now
+    // names TID2; an event about TID must not be filed under TID2.
+    seedSession({ tournamentId: TID2, playerId: PID2, displayName: "Bo" });
+
+    report("watchdog", { tournamentId: TID, gameId: GID });
+    const p = sent();
+    expect(p.tournamentId).toBe(TID);
+    expect(p.playerId).toBe(PID);
+    // The id is lifted into its own field, exactly like gameId.
+    expect(p.detail).toEqual({});
+
+    report("watchdog", { gameId: GID }); // no carrier → the pointed-at session
+    expect(sent(1).tournamentId).toBe(TID2);
+    expect(sent(1).playerId).toBe(PID2);
+  });
+
+  it("names a carried tournament even when the device has no session for it", () => {
+    store.clear();
+    report("api_5xx", { tournamentId: TID, status: 503 });
+    const p = sent();
+    expect(p.tournamentId).toBe(TID);
+    expect(p.playerId).toBeUndefined();
   });
 });
 

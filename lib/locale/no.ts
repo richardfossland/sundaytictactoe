@@ -487,6 +487,9 @@ export const no = {
     invalidPin: "Fant ingen turnering med den PIN-en",
     tournamentFinished: "Turneringen er ferdig 🏆",
     showMyCode: "Vis koden min",
+    // Shared classroom device: hand the iPad to the next student without
+    // wiping any OTHER tournament this device has a session for (R6).
+    switchPlayer: "Ikke deg? Bytt spiller",
     invalidCode: "Ugyldig kode",
     illegalMove: "Ulovlig trekk",
     notYourTurn: "Det er ikke din tur",

@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 
 import type { StoredPlayer } from "@/lib/client/identity";
-import { seedPlayer } from "../helpers/identity";
+import { seedLegacyPlayer, seedPlayer } from "../helpers/identity";
 
 // Getting two students onto one live board, without a browser driving the
 // teacher's lobby.
@@ -172,12 +172,17 @@ export async function publicFlowMatch(
  *
  * Resolves once `board-shell` AND its cells are on screen — the board is the
  * only proof that all three steps completed.
+ *
+ * `legacy: true` seeds the PRE-R6 single-slot `ttt:player` key instead of the
+ * per-tournament layout, so one spec can prove the migration on the only path
+ * that matters: a device that was mid-tournament when the deploy landed.
  */
 export async function openAs(
   context: BrowserContext,
   player: StoredPlayer,
+  opts: { legacy?: boolean } = {},
 ): Promise<Page> {
-  await seedPlayer(context, player);
+  await (opts.legacy ? seedLegacyPlayer(context, player) : seedPlayer(context, player));
 
   const page = await context.newPage();
   await page.goto("/play");

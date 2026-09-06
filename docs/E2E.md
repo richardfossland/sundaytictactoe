@@ -401,9 +401,10 @@ e2e/
                        blockRoute (canned reply + its undo) · hangRoute
 ```
 
-`openAs` fakes no screens: it writes `ttt:player` via `addInitScript` and lets
-`/play` walk its real path — `attemptResume` → `WaitingRoom` latches the live
-game → `GameView` mounts — then waits for `board-shell` and a cell inside it.
+`openAs` fakes no screens: it writes `ttt:player:<tournamentId>` (plus the
+`ttt:player:last` pointer) via `addInitScript` and lets `/play` walk its real
+path — `attemptResume` → `WaitingRoom` latches the live game → `GameView`
+mounts — then waits for `board-shell` and a cell inside it.
 
 `publicFlowMatch` reaches a live board **without** the seam, mirroring
 `scripts/smoke-features.mjs`: it is the guard against the seam quietly drifting
@@ -469,7 +470,8 @@ Stable hooks, kebab-case, added only where a spec needs one. The same names are
 used by SundayChess, so keep them generic:
 
 `board-shell` · `turn-banner` · `toast` · `result-card` · `passive-tab` ·
-`load-error` · `join-screen` · `resume-retry` · `waiting-room` · `movelist`
+`load-error` · `join-screen` · `resume-retry` · `waiting-room` · `movelist` ·
+`switch-player`
 
 Prefer these over class names and copy: a restyle or a wording pass must not
 break the suite.
