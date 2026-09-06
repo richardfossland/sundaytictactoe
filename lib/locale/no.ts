@@ -194,6 +194,13 @@ export const no = {
     kickConfirm: (name: string) => `Kaste ut ${name}?`,
     online: "Tilkoblet",
     offline: "Frakoblet",
+    // LeagueView: the collapsed roster of players marked absent/left, with a
+    // way back in for the NEXT round (pairings for the current round are
+    // already set — see app/api/game/reinstate/route.ts).
+    outOfTournamentSection: (n: number) => `Ute av turneringen (${n})`,
+    reinstate: "Ta inn igjen",
+    reinstateConfirm: (name: string) =>
+      `Fra neste runde blir ${name} paret igjen.`,
     podium: "Vinnere",
     champion: "Mester",
     newTournament: "Ny turnering",
@@ -364,7 +371,8 @@ export const no = {
     waitingNext: "Venter på neste motstander …",
     waitingBye:
       "Du har frirunde denne runden og får 1 poeng gratis 🎉 Slapp av til neste runde.",
-    outOfTournament: "Du er ute av turneringen 🏁 — godt spilt!",
+    outOfTournament:
+      "Du er ute av turneringen 🏁 — godt spilt! Si fra til læreren hvis dette er feil, så kan hun ta deg inn igjen fra tavla.",
     cupProgress: "Cup-stigen",
     yourTurn: "DIN TUR",
     opponentTurn: "Venter på motstander",
@@ -401,7 +409,6 @@ export const no = {
     lostSub: "Bedre lykke neste runde.",
     drawSub: "Godt spilt av begge.",
     invalidPin: "Fant ingen turnering med den PIN-en",
-    tournamentAlreadyStarted: "Turneringen har allerede startet.",
     tournamentFinished: "Turneringen er ferdig 🏆",
     showMyCode: "Vis koden min",
     invalidCode: "Ugyldig kode",
@@ -431,12 +438,21 @@ export const no = {
       "Du ble borte en stund, så arrangøren tok deg ut av lobbyen. Trykk under, så er du med igjen.",
     rejoinLobby: "Bli med igjen",
     rejoinFailed: "Klarte ikke å bli med igjen. Prøv en gang til.",
-    // Removed after the tournament started — the pairings are set, so they have
-    // to join afresh rather than slipping silently back in.
+    // Removed after the tournament started — the pairings are set, so a silent
+    // slip-back-in isn't possible. Say the truth instead of pointing at a PIN
+    // screen that just dead-ends in `alreadyStarted` below: the teacher is the
+    // one who can actually undo this (app/api/game/reinstate/route.ts).
     removedTitle: "Du ble fjernet fra turneringen",
     removedBody:
-      "Arrangøren har tatt deg ut. Du kan bli med på nytt med PIN-en fra tavla.",
-    rejoinNew: "Bli med på nytt",
+      "Arrangøren har tatt deg ut av denne turneringen. Si fra til læreren — hun kan ta deg inn igjen fra tavla.",
+    // The button stays: it's the right move for joining a DIFFERENT, still-open
+    // tournament — just not a way back into this one.
+    rejoinNew: "Bli med i en annen turnering",
+    // /api/join's 409 already_started, once pairings exist. Late-join stays
+    // blocked (see the reinstate route's doc comment) — but the old copy
+    // ("Turneringen har allerede startet.") was a dead end with no next step.
+    alreadyStarted:
+      "Turneringen er i gang — si fra til læreren, så kan hun ta deg inn fra tavla.",
     oppOutOfTime: "Motstanderens tid er ute!",
     claimWin: "Krev seier på tid",
     myTimeOut: "Tiden din er ute",

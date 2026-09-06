@@ -294,4 +294,12 @@ export const api = {
       playerId,
       resumeCode,
     }),
+
+  // ---- the teacher's undo for a player marked absent/left ----
+  reinstate: (tournamentId: string, hostCode: string, playerId: string) =>
+    post<Record<string, never>>("/api/game/reinstate", {
+      tournamentId,
+      hostCode,
+      playerId,
+    }),
 };

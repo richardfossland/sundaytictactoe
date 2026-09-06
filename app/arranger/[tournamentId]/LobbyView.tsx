@@ -11,6 +11,7 @@ import { recordPresence, sweepCandidates } from "@/lib/client/lobbyKick";
 import { channels } from "@/lib/realtime";
 import { initials } from "@/lib/client/Confetti";
 import { teamColor } from "@/lib/tournament/teams";
+import { roundsWarning } from "@/lib/tournament/roundsAdvice";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { no } from "@/lib/locale/no";
 import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
@@ -102,6 +103,11 @@ export function LobbyView({
   }
 
   const active = players.filter((p) => p.status === "active");
+  // Roster is only known once players have joined (see roundsAdvice.ts's doc
+  // comment — the arranger wizard runs before that, so it can't check this).
+  // The lobby is the first place with a real player count, and the last
+  // chance to change the round count before it's baked into every pairing.
+  const roundsHint = roundsWarning(active.length, tournament.config.leagueRounds);
 
   // Presence bookkeeping for the conservative auto-kick: a player must have
   // CONNECTED at least once and then been gone continuously past the grace
@@ -289,6 +295,9 @@ export function LobbyView({
           </button>
           {active.length < 2 && (
             <p className="faint" style={{ fontSize: 13 }}>{no.host.needTwoPlayers}</p>
+          )}
+          {roundsHint && (
+            <p className="faint" style={{ fontSize: 13 }}>⚠️ {roundsHint}</p>
           )}
           {error && <div className="banner banner-error">{error}</div>}
         </section>
