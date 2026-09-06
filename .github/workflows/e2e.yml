@@ -17,6 +17,11 @@ on:
         type: string
         default: desktop-chromium
 
+# Reusable workflows inherit the caller's permissions unless declared here —
+# be explicit rather than relying on whatever ci.yml/nightly.yml happen to grant.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -63,11 +68,19 @@ jobs:
             npm run e2e:install
           fi
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
           # Pinned, not `latest`: `supabase start`'s service names and the key
           # names in `status -o env` are both CLI-version surface, and this suite
           # reads both. Matches the version documented in docs/E2E.md.
+          #
+          # v3 (not v1): v1 declared `runs: using: node20`, the deprecated JS
+          # action runtime GitHub warns about on every run. v3 is a composite
+          # action that installs the CLI from npm and only requires an existing
+          # Node 20+ on PATH (the setup-node step above already provides Node
+          # 22) — no separate runtime declaration to go stale. `version:` still
+          # takes a fixed CLI release published to npm; 2.101.0 is on the
+          # registry (`npm view supabase versions`), so the pin is unchanged.
           version: 2.101.0
 
       - name: Start local Supabase
@@ -156,15 +169,29 @@ jobs:
             echo "::endgroup::"
           done
 
-      - uses: actions/upload-artifact@v7
+      - name: Upload HTML report
+        # `if: always()` — a green nightly is the only baseline a suspected
+        # regression can be diffed against; without this a green run leaves
+        # nothing to compare and only a red run was ever inspectable. The report
+        # itself is tiny on a pass (no traces/videos — see the next step, which
+        # stays failure-only).
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload traces and test results (failure only)
+        # `trace: retain-on-failure` and `video: retain-on-failure` mean this
+        # directory is empty on a green run — nothing lost by keeping this one
+        # failure-only. Open with `npx playwright show-report
+        # <unzipped>/playwright-report`, which resolves the trace links inside.
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-${{ github.run_id }}-${{ github.run_attempt }}
-          # `trace: retain-on-failure` and `video: retain-on-failure` write into
-          # test-results/; the HTML report indexes them. Open with
-          # `npx playwright show-report <unzipped>/playwright-report`.
-          path: |
-            playwright-report/
-            test-results/
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
           retention-days: 7
           if-no-files-found: ignore

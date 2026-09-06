@@ -74,11 +74,14 @@ migrations are schema-qualified and `supabase/config.toml` already lists
 `tictactoe` under `[api] schemas` / `extra_search_path`, so a plain local start
 exposes them through PostgREST with nothing to grant by hand.
 
-CI pins the CLI at **2.101.0** (`supabase/setup-cli@v1`, `version:` input). Both
+CI pins the CLI at **2.101.0** (`supabase/setup-cli@v3`, `version:` input). Both
 `supabase start`'s service names and the key names in `status -o env` are
-CLI-version surface, so bump that pin and this recipe together. (`setup-cli@v1`
-still targets Node 20 and GitHub forces it onto 24 with a warning; newer majors
-resolve `version:` differently, so moving is a change of its own.)
+CLI-version surface, so bump that pin and this recipe together. (`v3` installs
+the CLI from npm and only needs an existing Node 20+ on `PATH` — the workflow's
+own `setup-node` step provides that — rather than declaring its own action
+runtime the way `v1`'s `runs: using: node20` did, which is what GitHub warned
+about. `version:` still takes a fixed CLI release published to npm, so the pin
+above carried over unchanged.)
 
 `supabase start`'s `-x` names come from `supabase start --help`; the full set is
 `analytics, db, edge-runtime, functions, imgproxy, inbucket, kong, meta,
@@ -147,18 +150,21 @@ every run: they live in the runner image, not in the cache.
 `uptime.yml` is untouched by any of this: it probes the deployed hostname from
 outside and has nothing to do with the local-Supabase lane.
 
-### When it goes red
+### Report artefact on every run
 
-The job uploads `playwright-report/` and `test-results/` as
-`playwright-<run id>-<attempt>` (7 days) on failure only. Download it, unzip, and:
+The job uploads the HTML report — `playwright-report-<run id>-<attempt>` — on
+**every** run, pass or fail (`if: always()`, 7-day retention). Before this, a
+green nightly left nothing to diff a suspected regression against; now there is
+always a report to compare, even when nothing failed. `test-results/` (the
+traces, videos and screenshots) uploads as `playwright-results-<run
+id>-<attempt>` on failure only, since `trace`, `video` and `screenshot` are all
+`retain-on-failure` and the directory is empty on a green run regardless.
+Download either, unzip, and:
 
 ```bash
-npx playwright show-report path/to/playwright-report   # report + embedded traces
+npx playwright show-report path/to/playwright-report   # report + embedded traces (failure only)
 npx playwright show-trace path/to/test-results/**/trace.zip
 ```
-
-`trace`, `video` and `screenshot` are all `retain-on-failure`, so a green run
-uploads nothing and a red one carries the whole timeline.
 
 A failing step also dumps `supabase status` and the last 120 lines of every
 `supabase_*` container — Realtime refusing a join, or PostgREST rejecting the

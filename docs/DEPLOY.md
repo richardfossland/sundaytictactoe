@@ -12,6 +12,13 @@ Next 16 SSR is deployed to a **Cloudflare Worker** (name `sundaytictactoe`)
 using `@opennextjs/cloudflare` (supports `next >=16.2.6`). Config lives in
 `open-next.config.ts` + `wrangler.jsonc`.
 
+> `wrangler.jsonc`'s `compatibility_date` was bumped **2026-09 → `2026-08-01`**
+> (from a stale `2025-05-05`, ~16 months old — `@opennextjs/cloudflare`'s own
+> build step warns past 6 months, and its scaffolding falls back to this exact
+> date). `npm run cf:build` was reverified against it. **Smoke-test the first
+> deploy after this merge** — a compat-date bump changes workerd's runtime
+> behavior (e.g. `nodejs_compat` semantics), not just the version string.
+
 ```bash
 # deps (already in package.json): @opennextjs/cloudflare, esbuild, wrangler
 
