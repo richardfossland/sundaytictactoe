@@ -42,6 +42,13 @@ export interface TournamentConfig {
   /** Casual 1v1: a throwaway two-player session created via /api/casual (not a
    * real tournament). The second join auto-starts the single game. */
   casual?: boolean;
+  /** Teacher's private note to self (class, lesson, whatever). ≤280 chars.
+   * NEVER shown to students — lib/dto.ts's toBoardTournament strips it before
+   * the public board DTO is built, since that endpoint is unauthenticated and
+   * polled by every player. Host-only surfaces (HostDashboard, the host board
+   * header, the finished screen's print header) read it straight off
+   * `tournament.config.notes` instead. */
+  notes?: string;
 }
 
 export interface Tournament {

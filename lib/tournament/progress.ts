@@ -98,3 +98,39 @@ export function waitingProgress(
 
   return { label, timer };
 }
+
+/** Should the waiting room offer "play solo while you wait" (linking out to
+ * /solo)? True once there is nothing left for `playerId` to do right now:
+ *  - marked "left" (a walkover / lobby ghost-kick that outlived the lobby —
+ *    mirrors WaitingRoom's own component-local `isOut`, first branch), or
+ *  - eliminated from the CURRENT playoff round (reuses `eliminatedFromRound`
+ *    above — same `isOut` second branch; a knockout loss is final, so unlike
+ *    the league branch below, "waiting between playoff rounds" alone doesn't
+ *    count), or
+ *  - in a LEAGUE round: has a bye, or already finished their game while other
+ *    boards are still live (their most recent game exists and isn't "live").
+ * Always false in the lobby (nothing paired yet) or once the tournament is
+ * "finished" (the final-results card owns that screen instead). */
+export function offerSoloWhileWaiting(state: BoardState, playerId: string): boolean {
+  const { tournament, players, games, rounds } = state;
+  if (tournament.status === "lobby" || tournament.status === "finished") {
+    return false;
+  }
+
+  const me = players.find((p) => p.id === playerId);
+  if (me?.status === "left") return true;
+
+  if (tournament.status === "playoff") {
+    const round = rounds.find(
+      (r) => r.phase === "playoff" && r.number === tournament.currentRound,
+    );
+    return eliminatedFromRound(state, playerId, round);
+  }
+
+  const mine = games.filter(
+    (g) => g.whitePlayerId === playerId || g.blackPlayerId === playerId,
+  );
+  if (mine.length === 0) return false;
+  const current = mine.find((g) => g.status === "live") ?? mine[mine.length - 1];
+  return current.status !== "live";
+}

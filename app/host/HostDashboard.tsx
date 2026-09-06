@@ -16,6 +16,10 @@ interface Summary {
   join_pin: string;
   created_at: string;
   playerCount: number;
+  /** Teacher's private note-to-self (config.notes) — safe to show here: this
+   * page is read straight off the DB row for the signed-in owner, never
+   * through the public board DTO (see app/host/page.tsx). */
+  notes: string | null;
 }
 
 type Strings = (typeof no)["hostAuth"];
@@ -113,6 +117,11 @@ export function HostDashboard({
                     {t[STATUS_KEY[row.status]]} · {row.playerCount} {t.players} · PIN{" "}
                     {row.join_pin}
                   </span>
+                  {row.notes && (
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {t.notesLabel}: {row.notes}
+                    </span>
+                  )}
                 </div>
                 <div className="row" style={{ gap: 8, flexShrink: 0 }}>
                   <Link href={`/arranger/${row.id}`} className="btn">

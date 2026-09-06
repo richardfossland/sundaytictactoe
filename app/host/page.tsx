@@ -19,6 +19,10 @@ export default async function HostPage() {
     throw err;
   }
 
+  // listTournamentsByOwner already resolves config.notes onto each row (see
+  // its own comment in lib/server/store.ts) — this page is server-rendered
+  // straight from the DB row for the signed-in owner, never through the
+  // public board DTO, so it's safe to pass notes straight through.
   const tournaments = await listTournamentsByOwner(host.id);
   return (
     <HostDashboard

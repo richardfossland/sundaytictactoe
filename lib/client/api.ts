@@ -302,4 +302,26 @@ export const api = {
       hostCode,
       playerId,
     }),
+
+  // ---- config patch: finish the league early (lower leagueRounds) and/or
+  // save the teacher's private notes. ONE route for both — see
+  // app/api/tournament/[id]/config/route.ts's header comment for why.
+  updateTournamentConfig: (
+    tournamentId: string,
+    hostCode: string,
+    patch: { leagueRounds?: number; notes?: string },
+  ) =>
+    post<{ leagueRounds: number; notes: string | null }>(
+      `/api/tournament/${tournamentId}/config`,
+      { hostCode, ...patch },
+    ),
+
+  // Same route, no patch fields: reads the current leagueRounds/notes back
+  // (notes never rides on the public board poll — see toBoardTournament) —
+  // used to pre-fill NotesModal's textarea.
+  getTournamentConfig: (tournamentId: string, hostCode: string) =>
+    post<{ leagueRounds: number; notes: string | null }>(
+      `/api/tournament/${tournamentId}/config`,
+      { hostCode },
+    ),
 };

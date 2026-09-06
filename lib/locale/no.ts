@@ -83,6 +83,9 @@ export const no = {
     statusFinished: "Ferdig",
     untitled: "Uten tittel",
     players: "spillere",
+    // Teacher's private note-to-self (config.notes), shown under the title
+    // on each dashboard card — this page is host-only (getHost() gates it).
+    notesLabel: "Notat",
   },
 
   versus: {
@@ -217,6 +220,20 @@ export const no = {
     reinstate: "Ta inn igjen",
     reinstateConfirm: (name: string) =>
       `Fra neste runde blir ${name} paret igjen.`,
+    // Finish-early escape hatch (LeagueView, next to "Neste runde") — lowers
+    // config.leagueRounds to the round in progress, so the existing
+    // "Fullfør"/finish path fires as soon as it's done.
+    finishEarly: "Avslutt etter denne runden",
+    finishEarlyConfirm: (round: number) =>
+      `Turneringen avsluttes når runde ${round} er ferdig. Sluttspill (hvis valgt) starter som normalt.`,
+    finishEarlyError: "Klarte ikke å korte ned turneringen. Prøv igjen.",
+    // Teacher's private note-to-self (config.notes) — editable from the host
+    // board header; never shown to students.
+    editNotes: "Rediger notat",
+    notesModalTitle: "Notat til deg selv",
+    notesPlaceholder: "F.eks. klasse, time …",
+    notesSave: "Lagre",
+    notesSaveError: "Klarte ikke å lagre notatet. Prøv igjen.",
     podium: "Vinnere",
     champion: "Mester",
     newTournament: "Ny turnering",
@@ -304,6 +321,11 @@ export const no = {
     titleStep: "Tittel",
     titleHint: "Valgfritt — f.eks. «7A vårturnering»",
     titlePlaceholder: "Turneringstittel",
+    // Private note-to-self, entered on the same step as the title. Never
+    // shown to students (see lib/dto.ts's toBoardTournament).
+    notesLabel: "Notat til deg selv — klasse, time …",
+    notesPlaceholder: "Valgfritt, bare synlig for deg",
+    reviewNotes: "Notat",
     formatStep: "Turneringsform",
     formatLeague: "Liga",
     formatLeagueSub: "Alle spiller flere runder (sveitsisk) — ev. sluttspill til slutt",
@@ -513,6 +535,12 @@ export const no = {
     finalTitle: "Sluttresultat",
     youPlaced: "Du ble nr.",
     of: "av",
+    // Waiting-room card for a player who's eliminated (playoff), has a bye, or
+    // finished their game early while others are still playing — links to
+    // /solo in a NEW tab, so opening it never loses the tournament screen.
+    soloWhileWaitingTitle: "Venter du?",
+    soloWhileWaitingBody: "Spill mot datamaskinen mens du venter.",
+    soloWhileWaitingCta: "♟️ Spill solo (åpner i ny fane)",
   },
 
   solo: {

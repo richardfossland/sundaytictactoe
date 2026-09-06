@@ -15,6 +15,7 @@ import { roundsWarning } from "@/lib/tournament/roundsAdvice";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { no } from "@/lib/locale/no";
 import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
+import { NotesModal } from "./NotesModal";
 
 /** A player who has been continuously disconnected for this long while still in
  * the lobby is auto-removed (they left the app). Conservative so a brief wifi
@@ -80,6 +81,7 @@ export function LobbyView({
   // its OS popup is easy to miss on a projector); the player's name is named
   // in the message so the teacher knows exactly who they're about to remove.
   const [kickTarget, setKickTarget] = useState<{ id: string; name: string } | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     const base = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
@@ -218,6 +220,16 @@ export function LobbyView({
         </span>
         <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
           {tournament.title && <span className="muted">{tournament.title}</span>}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ padding: "6px 12px", fontSize: 13, minHeight: 0 }}
+            title={no.host.editNotes}
+            aria-label={no.host.editNotes}
+            onClick={() => setShowNotes(true)}
+          >
+            ✎
+          </button>
           {hostCode && (
             hostCodeRevealed ? (
               <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
@@ -367,6 +379,15 @@ export function LobbyView({
             setKickTarget(null);
           }}
           onCancel={() => setKickTarget(null)}
+        />
+      )}
+
+      {showNotes && (
+        <NotesModal
+          tournamentId={tournament.id}
+          hostCode={hostCode ?? ""}
+          onClose={() => setShowNotes(false)}
+          onSaved={onChanged}
         />
       )}
     </main>

@@ -12,6 +12,7 @@ import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
 import { OverrideModal } from "./OverrideModal";
 import { CodesModal } from "./CodesModal";
+import { NotesModal } from "./NotesModal";
 import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 
 function resultLabel(g: PublicGame, name: (id: string | null) => string): string {
@@ -58,6 +59,11 @@ export function LeagueView({
   const [reinstateTarget, setReinstateTarget] = useState<{ id: string; name: string } | null>(
     null,
   );
+  // Finish-early ("Avslutt etter denne runden") lowers config.leagueRounds to
+  // the current round — irreversible in the sense that the skipped rounds
+  // never happen, so it's confirmed the same way as force-resolve above.
+  const [confirmFinishEarly, setConfirmFinishEarly] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -157,6 +163,30 @@ export function LeagueView({
     }
   }
 
+  function requestFinishEarly() {
+    if (!hostCode) return setError(no.host.missingHostCode);
+    setConfirmFinishEarly(true);
+  }
+
+  async function finishEarly() {
+    setConfirmFinishEarly(false);
+    setBusy(true);
+    setError(null);
+    try {
+      // Lowers leagueRounds to the round in progress/just finished — the
+      // existing "Fullfør" advance path then finishes the league (or starts
+      // the playoff, if configured) as soon as this round is done.
+      await api.updateTournamentConfig(tournament.id, hostCode ?? "", {
+        leagueRounds: tournament.currentRound,
+      });
+      onChanged();
+    } catch {
+      setError(no.host.finishEarlyError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reinstate(playerId: string) {
     if (!hostCode) return setError(no.host.missingHostCode);
     setBusy(true);
@@ -177,6 +207,19 @@ export function LeagueView({
         <span className="brandmark">
           <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
         </span>
+        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+          {tournament.title && <span className="muted">{tournament.title}</span>}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ padding: "6px 10px", fontSize: 13, minHeight: 0 }}
+            title={no.host.editNotes}
+            aria-label={no.host.editNotes}
+            onClick={() => setShowNotes(true)}
+          >
+            ✎
+          </button>
+        </div>
         <span className="badge badge-live">
           {no.host.round} {tournament.currentRound} / {tournament.config.leagueRounds}
         </span>
@@ -402,6 +445,14 @@ export function LeagueView({
             >
               {busy ? <span className="spin" /> : isLastRound ? no.host.finishRound : no.host.nextRound}
             </button>
+            {/* Finish early: only makes sense while there's still a round left
+                to skip — once this IS the last configured round, "Fullfør"
+                above already does the same thing. */}
+            {!isLastRound && (
+              <button className="btn btn-ghost" disabled={busy} onClick={requestFinishEarly}>
+                {no.host.finishEarly}
+              </button>
+            )}
             {liveCount > 0 && (
               <button className="btn btn-danger" disabled={busy} onClick={requestForce}>
                 {busy ? <span className="spin" /> : no.host.forceResolve}
@@ -443,6 +494,15 @@ export function LeagueView({
         />
       )}
 
+      {showNotes && (
+        <NotesModal
+          tournamentId={tournament.id}
+          hostCode={hostCode ?? ""}
+          onClose={() => setShowNotes(false)}
+          onSaved={onChanged}
+        />
+      )}
+
       <FullscreenToggle />
 
       {confirmForce && (
@@ -452,6 +512,15 @@ export function LeagueView({
           danger
           onConfirm={force}
           onCancel={() => setConfirmForce(false)}
+        />
+      )}
+
+      {confirmFinishEarly && (
+        <ConfirmDialog
+          message={no.host.finishEarlyConfirm(tournament.currentRound)}
+          confirmLabel={no.host.finishEarly}
+          onConfirm={finishEarly}
+          onCancel={() => setConfirmFinishEarly(false)}
         />
       )}
 

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { BoardState, PublicGame } from "@/lib/dto";
+import { api } from "@/lib/client/api";
+import { identity } from "@/lib/client/identity";
 import { Confetti, initials } from "@/lib/client/Confetti";
 import { SoundToggle } from "@/lib/client/SoundToggle";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
@@ -72,6 +74,32 @@ export function FinishedView({ state }: { state: BoardState }) {
   useEffect(() => {
     sound.play("win");
   }, []);
+
+  // Teacher's private note-to-self (config.notes) — NEVER rides on the public
+  // board poll (lib/dto.ts's toBoardTournament strips it), so it's fetched
+  // separately through the host-code-gated config route. Silently absent if
+  // the host code isn't on this device (e.g. a colleague projecting from a
+  // shared account/PIN) — a print-only nicety is never worth erroring the
+  // finished screen for. Only ever rendered inside `.print-only` below: this
+  // screen is the one the class watches on the projector, so the note must
+  // stay off the live display and appear solely on the teacher's own printout.
+  const [notes, setNotes] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const hostCode = identity.hostCode(tournament.id);
+    if (!hostCode) return;
+    api
+      .getTournamentConfig(tournament.id, hostCode)
+      .then((r) => {
+        if (!cancelled) setNotes(r.notes);
+      })
+      .catch(() => {
+        // Print-only nicety — never worth erroring the finished screen for.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tournament.id]);
 
   const championId = useMemo(() => {
     const playoffRounds = rounds
@@ -147,12 +175,17 @@ export function FinishedView({ state }: { state: BoardState }) {
         <Confetti />
       </div>
 
-      {/* Printed page only: a plain title + date the projector never shows. */}
+      {/* Printed page only: a plain title + date the projector never shows.
+          The teacher's own reminder (config.notes, fetched below) rides
+          along here too — this block is print-only, so it's the one place
+          it's safe to show: the SAME screen this podium renders on is what
+          the class watches on a projector. */}
       <div className="print-only">
         <h1 style={{ fontSize: 26, marginBottom: 2 }}>{tournament.title || no.appName}</h1>
         <p style={{ fontSize: 13 }}>
           {new Date().toLocaleDateString("no", { day: "2-digit", month: "long", year: "numeric" })}
         </p>
+        {notes && <p style={{ fontSize: 13, marginTop: 4 }}>{notes}</p>}
       </div>
 
       <div className="stack text-center" style={{ alignItems: "center", maxWidth: 680, gap: 18 }}>
