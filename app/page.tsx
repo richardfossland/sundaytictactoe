@@ -23,8 +23,7 @@ export default function Landing() {
         </h1>
         <hr className="thread reveal" style={r(3, { width: 120 })} />
         <p className="muted reveal" style={r(4, { maxWidth: 440, fontSize: 17 })}>
-          En bondesjakk-turnering for hele gruppa. Arrangøren styrer tavla,
-          spillerne blir med med en PIN — stort på storskjerm, med X og O.
+          {no.landing.lede}
         </p>
 
         {/* two entrances */}

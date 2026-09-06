@@ -324,7 +324,7 @@ export function LeagueView({
               disabled={busy || !allResolved}
               onClick={advance}
             >
-              {busy ? <span className="spin" /> : isLastRound ? "Fullfør" : no.host.nextRound}
+              {busy ? <span className="spin" /> : isLastRound ? no.host.finishRound : no.host.nextRound}
             </button>
             {liveCount > 0 && (
               <button className="btn btn-danger" disabled={busy} onClick={force}>
@@ -334,7 +334,7 @@ export function LeagueView({
           </div>
           {!allResolved && (
             <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-              Alle partier må være ferdige før neste runde.
+              {no.host.allGamesMustFinish}
             </p>
           )}
           {error && <div className="banner banner-error" style={{ marginTop: 10 }}>{error}</div>}

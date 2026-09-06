@@ -166,7 +166,7 @@ export function BracketView({
             disabled={busy || !allResolved}
             onClick={() => advance()}
           >
-            {busy ? <span className="spin" /> : isFinal ? "Kår mester" : no.host.nextRound}
+            {busy ? <span className="spin" /> : isFinal ? no.host.crownChampion : no.host.nextRound}
           </button>
         )}
       </div>
@@ -177,7 +177,7 @@ export function BracketView({
       ) : (
         !allResolved && (
           <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-            Alle partier i runden må være ferdige.
+            {no.host.allRoundGamesMustFinish}
           </p>
         )
       )}

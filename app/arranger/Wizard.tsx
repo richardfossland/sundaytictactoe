@@ -20,12 +20,6 @@ type StepKey =
   | "teams"
   | "review";
 
-const VARIANT_SUB: Record<string, string> = {
-  "3x3": "Klassisk – tre på rad på 3×3",
-  "4x4": "Større brett – fire på rad på 4×4",
-  "5x5": "Stort brett – fire på rad på 5×5, sjelden uavgjort",
-};
-
 export const TEAM_NAMES = ["Rød", "Blå", "Grønn", "Gul"] as const;
 
 export function Wizard({ onExit }: { onExit?: () => void }) {
@@ -203,7 +197,7 @@ export function Wizard({ onExit }: { onExit?: () => void }) {
               >
                 <b>{v.label}</b>
                 <span style={{ display: "block", fontSize: 12, opacity: 0.75, fontWeight: 400 }}>
-                  {VARIANT_SUB[v.id]}
+                  {no.wizard.variants[v.id]}
                 </span>
               </button>
             ))}

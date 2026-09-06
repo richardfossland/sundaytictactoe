@@ -42,7 +42,7 @@ export default function HostEntry() {
 
         {mode === "choose" && (
           <div className="stack" style={{ gap: 12 }}>
-            <p className="eyebrow text-center">Arrangør</p>
+            <p className="eyebrow text-center">{no.host.arrangerEyebrow}</p>
             <button
               className="btn btn-primary btn-block btn-lg"
               onClick={() => setMode("create")}

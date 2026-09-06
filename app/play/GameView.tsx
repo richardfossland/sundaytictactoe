@@ -303,10 +303,24 @@ export const GameView = memo(function GameView({
     return () => clearTimeout(t);
   }, [pending, safeLoad, gameId]);
 
-  const flash = (msg: string) => {
+  // Toast auto-clear timer, kept in a ref so a second flash() while one is
+  // already showing clears the FIRST timer instead of racing it — otherwise
+  // the first toast's timeout still fires ~2.2s after ITS call and blanks the
+  // second toast early, cutting it short.
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flash = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(msg);
-    setTimeout(() => setToast(null), 2200);
-  };
+    toastTimer.current = setTimeout(() => {
+      toastTimer.current = null;
+      setToast(null);
+    }, 2200);
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   // Run a one-shot meta action (offer/accept/decline draw, resign): guard against
   // double-fire, and on failure reconcile to authoritative state via load().
@@ -459,7 +473,7 @@ export const GameView = memo(function GameView({
         setPending(false);
       }
     },
-    [appendSan, fen, gameId, isMyTurn, safeLoad, me.playerId, me.resumeCode, pending, V],
+    [appendSan, fen, flash, gameId, isMyTurn, safeLoad, me.playerId, me.resumeCode, pending, V],
   );
 
   // Another tab on this device took over this player's session.
@@ -616,7 +630,9 @@ export const GameView = memo(function GameView({
               aria-live="polite"
             >
               <span className="banner-line">
-                {isMyTurn ? `✕ ${no.player.yourTurn}` : no.player.opponentTurn}
+                {isMyTurn
+                  ? `${myColor === "white" ? "✕" : "◯"} ${no.player.yourTurn}`
+                  : no.player.opponentTurn}
               </span>
             </div>
           </div>
@@ -673,7 +689,7 @@ export const GameView = memo(function GameView({
                 )
               }
             >
-              ½ {no.player.offerDraw}
+              {no.player.offerDraw}
             </button>
             <button
               className="btn btn-danger"
@@ -692,7 +708,7 @@ export const GameView = memo(function GameView({
           <div className="notice-slot" style={ended ? { visibility: "hidden" } : undefined}>
             {drawSent && (
               <div className="banner banner-wait" style={{ width: "100%" }} role="status" aria-live="polite">
-                <span className="banner-line">½ {no.player.drawSent}</span>
+                <span className="banner-line">{no.player.drawSent}</span>
               </div>
             )}
           </div>
@@ -729,10 +745,10 @@ export const GameView = memo(function GameView({
             <h1 style={{ fontSize: "clamp(36px,9vw,64px)" }}>{resultText}</h1>
             <p className="muted">
               {status === "draw"
-                ? "Godt spilt av begge."
+                ? no.player.drawSub
                 : iWon
-                  ? "Sterkt spilt!"
-                  : "Bedre lykke neste runde."}
+                  ? no.player.wonSub
+                  : no.player.lostSub}
             </p>
             <button className="btn btn-primary btn-lg" style={{ marginTop: 6 }} onClick={onFinished}>
               {no.common.next} →

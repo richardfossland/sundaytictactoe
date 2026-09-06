@@ -180,7 +180,7 @@ export function LobbyView({
           <p className="eyebrow">{no.host.pinLabel}</p>
           <div className="pin-hero">{tournament.joinPin}</div>
           <div className="row" style={{ gap: 8, color: "var(--txt-dim)", fontSize: 15 }}>
-            <span>Gå til</span>
+            <span>{no.host.goTo}</span>
             <b style={{ color: "var(--txt)" }}>{joinUrl.replace(/^https?:\/\//, "")}</b>
           </div>
           {joinUrl && (
@@ -206,7 +206,7 @@ export function LobbyView({
             )}
           </button>
           {active.length < 2 && (
-            <p className="faint" style={{ fontSize: 13 }}>Minst 2 spillere må bli med.</p>
+            <p className="faint" style={{ fontSize: 13 }}>{no.host.needTwoPlayers}</p>
           )}
           {error && <div className="banner banner-error">{error}</div>}
         </section>

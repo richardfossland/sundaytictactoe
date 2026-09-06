@@ -134,7 +134,7 @@ export default function Play() {
         errCode === "invalid_pin"
           ? no.player.invalidPin
           : errCode === "already_started"
-            ? "Turneringen har allerede startet."
+            ? no.player.tournamentAlreadyStarted
             : no.common.error,
       );
       setBusy(false);

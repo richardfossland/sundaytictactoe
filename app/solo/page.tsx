@@ -192,6 +192,11 @@ export default function Solo() {
                 </button>
               ))}
             </div>
+            {variant.id === "3x3" && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                {no.solo.unbeatable3x3Note}
+              </span>
+            )}
           </div>
 
           <button className="btn btn-primary btn-block btn-lg" onClick={start}>
@@ -248,7 +253,11 @@ export default function Solo() {
             aria-live="polite"
           >
             <span className="banner-line">
-              {thinking ? no.solo.thinking : isMyTurn ? `✕ ${no.solo.yourTurn}` : no.solo.waiting}
+              {thinking
+                ? no.solo.thinking
+                : isMyTurn
+                  ? `${playerColor === "white" ? "✕" : "◯"} ${no.solo.yourTurn}`
+                  : no.solo.waiting}
             </span>
           </div>
         </div>
