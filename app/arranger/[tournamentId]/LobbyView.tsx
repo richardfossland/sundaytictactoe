@@ -11,7 +11,9 @@ import { recordPresence, sweepCandidates } from "@/lib/client/lobbyKick";
 import { channels } from "@/lib/realtime";
 import { initials } from "@/lib/client/Confetti";
 import { teamColor } from "@/lib/tournament/teams";
+import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { no } from "@/lib/locale/no";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 
 /** A player who has been continuously disconnected for this long while still in
  * the lobby is auto-removed (they left the app). Conservative so a brief wifi
@@ -30,6 +32,53 @@ export function LobbyView({
   const [hostCode, setHostCode] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The host code is never shown by default (UX-2) — the board is a classroom
+  // projector, and this code opens /arranger and /host with full control. A
+  // ghost button reveals it on demand, in a tap-to-hide chip that also times
+  // itself out so a teacher who forgets doesn't leave it up all lesson.
+  const [hostCodeRevealed, setHostCodeRevealed] = useState(false);
+  const [hostCodeCopied, setHostCodeCopied] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const HOST_CODE_REVEAL_MS = 20_000;
+
+  function revealHostCode() {
+    setHostCodeRevealed(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setHostCodeRevealed(false), HOST_CODE_REVEAL_MS);
+  }
+
+  function hideHostCode() {
+    setHostCodeRevealed(false);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+  }
+
+  async function copyHostCode() {
+    if (!hostCode) return;
+    try {
+      await navigator.clipboard.writeText(hostCode);
+      setHostCodeCopied(true);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setHostCodeCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied / unsupported — the code is still on
+      // screen (revealed) for the teacher to read or select manually.
+    }
+  }
+
+  useEffect(
+    () => () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    },
+    [],
+  );
+
+  // Kick asks for confirmation via the themed dialog (never window.confirm —
+  // its OS popup is easy to miss on a projector); the player's name is named
+  // in the message so the teacher knows exactly who they're about to remove.
+  const [kickTarget, setKickTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const base = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
@@ -161,12 +210,45 @@ export function LobbyView({
         <span className="brandmark">
           <span className="knight">✕◯</span> Sunday<b>TicTacToe</b>
         </span>
-        <div className="row" style={{ gap: 12 }}>
+        <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
           {tournament.title && <span className="muted">{tournament.title}</span>}
           {hostCode && (
-            <span className="badge">
-              Vertskode <span className="mono" style={{ color: "var(--gold)" }}>{hostCode}</span>
-            </span>
+            hostCodeRevealed ? (
+              <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                <div className="row" style={{ gap: 6 }}>
+                  <button
+                    type="button"
+                    className="badge"
+                    style={{ border: 0, cursor: "pointer" }}
+                    title={no.host.tapToHide}
+                    onClick={hideHostCode}
+                  >
+                    {no.host.hostCodeLabel}{" "}
+                    <span className="mono" style={{ color: "var(--gold)" }}>{hostCode}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ padding: "6px 12px", fontSize: 13, minHeight: 0 }}
+                    onClick={copyHostCode}
+                  >
+                    {hostCodeCopied ? no.common.copied : no.common.copy}
+                  </button>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--warn)" }}>
+                  ⚠️ {no.host.hostCodeWarning}
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: "6px 12px", fontSize: 13, minHeight: 0 }}
+                onClick={revealHostCode}
+              >
+                {no.host.revealHostCode}
+              </button>
+            )
           )}
         </div>
       </header>
@@ -253,9 +335,7 @@ export function LobbyView({
                       className="chip-kick"
                       title={no.host.kick}
                       aria-label={`${no.host.kick} ${p.displayName}`}
-                      onClick={() => {
-                        if (confirm(no.host.kickConfirm)) kick(p.id);
-                      }}
+                      onClick={() => setKickTarget({ id: p.id, name: p.displayName })}
                     >
                       ✕
                     </button>
@@ -266,6 +346,21 @@ export function LobbyView({
           )}
         </section>
       </div>
+
+      <FullscreenToggle />
+
+      {kickTarget && (
+        <ConfirmDialog
+          message={no.host.kickConfirm(kickTarget.name)}
+          confirmLabel={no.host.kick}
+          danger
+          onConfirm={() => {
+            kick(kickTarget.id);
+            setKickTarget(null);
+          }}
+          onCancel={() => setKickTarget(null)}
+        />
+      )}
     </main>
   );
 }

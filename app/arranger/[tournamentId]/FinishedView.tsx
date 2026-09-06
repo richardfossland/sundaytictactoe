@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import type { BoardState, PublicGame } from "@/lib/dto";
 import { Confetti, initials } from "@/lib/client/Confetti";
 import { SoundToggle } from "@/lib/client/SoundToggle";
+import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { sound } from "@/lib/client/sound";
 import { computeAwards, type Award } from "@/lib/tournament/awards";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
@@ -195,6 +196,7 @@ export function FinishedView({ state }: { state: BoardState }) {
       </div>
 
       <SoundToggle />
+      <FullscreenToggle />
     </main>
   );
 }

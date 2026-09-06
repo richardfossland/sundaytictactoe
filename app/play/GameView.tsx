@@ -22,6 +22,8 @@ import { RoundTimer } from "@/lib/client/RoundTimer";
 import { sound } from "@/lib/client/sound";
 import { SoundToggle } from "@/lib/client/SoundToggle";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
+import { NotifyToggle } from "@/lib/client/NotifyToggle";
+import { useTurnCue } from "@/lib/client/turnCue";
 import {
   ReactionBar,
   ReactionOverlay,
@@ -177,6 +179,12 @@ export const GameView = memo(function GameView({
   const myColor: Color = detail?.black?.id === me.playerId ? "black" : "white";
   const myTurnLetter: Turn = myColor === "white" ? "w" : "b";
   const isMyTurn = status === "live" && turn === myTurnLetter;
+
+  // Background "your turn" cue (title flash, vibration, opt-in notification)
+  // — see lib/client/turnCue.ts. A flat no-op while the tab is visible, so
+  // this can never touch the turn-banner text/layout or interfere with the
+  // e2e specs (which run with the tab visible).
+  useTurnCue({ isMyTurn, live: status === "live" });
 
   // Only one tab per player may be the active board (others POSTing moves with
   // the same identity collide → "can't move"). Passive tabs show a "play here".
@@ -797,6 +805,7 @@ export const GameView = memo(function GameView({
 
       <SoundToggle />
       <FullscreenToggle />
+      <NotifyToggle />
     </main>
   );
 });

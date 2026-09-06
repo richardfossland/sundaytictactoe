@@ -2,12 +2,23 @@
 
 import { useState } from "react";
 import { api } from "@/lib/client/api";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 import { no } from "@/lib/locale/no";
 import type { GameStatus } from "@/lib/types";
 
 interface Side {
   id: string;
   name: string;
+}
+
+/** One shared confirm-dialog slot: every destructive action in this modal
+ * (setting a result, marking someone absent) asks before it runs, instead of
+ * firing on the first tap — this is a teacher's board, often on a projector,
+ * and a mis-tap here changes recorded results. */
+interface PendingAction {
+  message: string;
+  danger: boolean;
+  run: () => void;
 }
 
 /** Teacher result-override + "player absent → walkover" dialog, shared by the
@@ -32,6 +43,7 @@ export function OverrideModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scope, setScope] = useState<"round" | "tournament">("round");
+  const [pending, setPending] = useState<PendingAction | null>(null);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -49,7 +61,13 @@ export function OverrideModal({
   const markAbsent = (playerId: string) =>
     run(() => api.absent(gameId, hostCode, playerId, scope));
 
+  const askResult = (r: GameStatus, message: string, danger = false) =>
+    setPending({ message, danger, run: () => setResult(r) });
+  const askAbsent = (playerId: string, message: string) =>
+    setPending({ message, danger: true, run: () => markAbsent(playerId) });
+
   return (
+    <>
     <div
       onClick={onClose}
       style={{
@@ -73,19 +91,35 @@ export function OverrideModal({
         </p>
 
         <p className="eyebrow">{no.host.setResult}</p>
-        <button className="btn btn-block" disabled={busy} onClick={() => setResult("white_win")}>
+        <button
+          className="btn btn-block"
+          disabled={busy}
+          onClick={() => askResult("white_win", no.host.overrideResultConfirm(white.name))}
+        >
           {white.name} ✓
         </button>
         {black && (
-          <button className="btn btn-block" disabled={busy} onClick={() => setResult("black_win")}>
+          <button
+            className="btn btn-block"
+            disabled={busy}
+            onClick={() => askResult("black_win", no.host.overrideResultConfirm(black.name))}
+          >
             {black.name} ✓
           </button>
         )}
-        <button className="btn btn-block" disabled={busy} onClick={() => setResult("draw")}>
+        <button
+          className="btn btn-block"
+          disabled={busy}
+          onClick={() => askResult("draw", no.host.overrideDrawConfirm)}
+        >
           {no.host.draw}
         </button>
         {allowAbort && (
-          <button className="btn btn-danger btn-block" disabled={busy} onClick={() => setResult("aborted")}>
+          <button
+            className="btn btn-danger btn-block"
+            disabled={busy}
+            onClick={() => askResult("aborted", no.host.overrideAbortConfirm, true)}
+          >
             {no.host.abort}
           </button>
         )}
@@ -108,10 +142,18 @@ export function OverrideModal({
                 {no.host.absentTournament}
               </button>
             </div>
-            <button className="btn btn-block" disabled={busy} onClick={() => markAbsent(white.id)}>
+            <button
+              className="btn btn-block"
+              disabled={busy}
+              onClick={() => askAbsent(white.id, no.host.overrideAbsentConfirm(white.name, scope))}
+            >
               {white.name} {no.host.absentSuffix}
             </button>
-            <button className="btn btn-block" disabled={busy} onClick={() => markAbsent(black.id)}>
+            <button
+              className="btn btn-block"
+              disabled={busy}
+              onClick={() => askAbsent(black.id, no.host.overrideAbsentConfirm(black.name, scope))}
+            >
               {black.name} {no.host.absentSuffix}
             </button>
           </>
@@ -123,5 +165,23 @@ export function OverrideModal({
         </button>
       </div>
     </div>
+
+    {/* Rendered as a SIBLING of the backdrop above, not nested inside it — the
+        backdrop's onClick={onClose} would otherwise catch the bubbled click
+        from ConfirmDialog's own backdrop and close this whole modal too when
+        the teacher only meant to cancel the confirmation. */}
+    {pending && (
+      <ConfirmDialog
+        message={pending.message}
+        danger={pending.danger}
+        onConfirm={() => {
+          const { run: doRun } = pending;
+          setPending(null);
+          doRun();
+        }}
+        onCancel={() => setPending(null)}
+      />
+    )}
+    </>
   );
 }

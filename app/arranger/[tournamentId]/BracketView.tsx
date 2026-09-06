@@ -7,7 +7,11 @@ import { identity } from "@/lib/client/identity";
 import { no } from "@/lib/locale/no";
 import { JoinChip } from "@/lib/client/JoinChip";
 import { RoundTimer } from "@/lib/client/RoundTimer";
+import { useCountdown } from "@/lib/client/useCountdown";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
+import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { sortBySlot } from "@/lib/tournament/bracket";
+import { roundTimerEndMs } from "@/lib/tournament/roundTimer";
 import { BracketBoard } from "@/lib/client/BracketBoard";
 import { OverrideModal } from "./OverrideModal";
 import { CodesModal } from "./CodesModal";
@@ -26,6 +30,7 @@ export function BracketView({
   const [notice, setNotice] = useState<string | null>(null);
   const [overrideGame, setOverrideGame] = useState<PublicGame | null>(null);
   const [showCodes, setShowCodes] = useState(false);
+  const [confirmForce, setConfirmForce] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -74,6 +79,8 @@ export function BracketView({
     new Set(currentCol.games.map((g) => g.slot ?? 0)).size === 1;
 
   const timerSec = tournament.config.roundTimerSec;
+  const timerEndMs = roundTimerEndMs(currentCol?.round, timerSec);
+  const { expired: timeUp } = useCountdown(timerEndMs);
 
   async function addMinute() {
     if (!hostCode) return setError(no.host.missingHostCode);
@@ -81,6 +88,20 @@ export function BracketView({
     setError(null);
     try {
       await api.extendRound(tournament.id, hostCode ?? "");
+      onChanged();
+    } catch {
+      setError(no.common.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function force() {
+    if (!hostCode) return setError(no.host.missingHostCode);
+    setBusy(true);
+    setError(null);
+    try {
+      await api.forceResolve(tournament.id, hostCode ?? "");
       onChanged();
     } catch {
       setError(no.common.error);
@@ -146,6 +167,33 @@ export function BracketView({
         onPick={(g) => setOverrideGame(g)}
       />
 
+      {timeUp && liveCount > 0 && (
+        <div
+          className="banner"
+          style={{
+            marginTop: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            background: "color-mix(in srgb, var(--warn) 18%, var(--ink-2))",
+            border: "1px solid color-mix(in srgb, var(--warn) 50%, transparent)",
+            color: "#f3d9c4",
+            maxWidth: 480,
+          }}
+        >
+          <span>⏰ {no.host.timeUpSuggestion}</span>
+          <button
+            className="btn btn-danger"
+            disabled={busy}
+            onClick={() => setConfirmForce(true)}
+            style={{ flexShrink: 0 }}
+          >
+            {busy ? <span className="spin" /> : no.host.endRound}
+          </button>
+        </div>
+      )}
+
       <div className="row" style={{ marginTop: 24, maxWidth: 480 }}>
         {hasUndecidedDraw ? (
           <>
@@ -210,6 +258,20 @@ export function BracketView({
           }}
         />
       )}
+
+      {confirmForce && (
+        <ConfirmDialog
+          message={no.host.forceResolveConfirm}
+          danger
+          onConfirm={() => {
+            setConfirmForce(false);
+            force();
+          }}
+          onCancel={() => setConfirmForce(false)}
+        />
+      )}
+
+      <FullscreenToggle />
     </main>
   );
 }

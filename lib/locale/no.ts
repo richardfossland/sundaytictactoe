@@ -149,7 +149,20 @@ export const no = {
     overrideTitle: "Overstyr resultat",
     setResult: "Sett resultat",
     draw: "Uavgjort",
-    abort: "Avbryt parti",
+    // Button label only (OverrideModal) — the imperative "cancel the game".
+    // The PAST-TENSE status shown in the games grid uses `aborted` below;
+    // reusing this one there read as an instruction, not a state.
+    abort: "Annuller partiet",
+    // Status label for an aborted game (LeagueView.resultLabel).
+    aborted: "Avbrutt",
+    overrideResultConfirm: (name: string) => `Sette resultatet til at ${name} vinner?`,
+    overrideDrawConfirm: "Sette resultatet til uavgjort?",
+    overrideAbortConfirm:
+      "Annullere partiet? Ingen av spillerne får poeng for det, og dette kan ikke angres.",
+    overrideAbsentConfirm: (name: string, scope: "round" | "tournament") =>
+      scope === "tournament"
+        ? `Sette ${name} som borte for resten av turneringen? Motstanderen vinner dette partiet.`
+        : `Sette ${name} som borte denne runden? Motstanderen vinner dette partiet.`,
     absentTitle: "Spiller borte → motstander vinner",
     absentRound: "Denne runden",
     absentTournament: "Ute av turneringen",
@@ -157,13 +170,20 @@ export const no = {
     showCodes: "Spillerkoder",
     codesTitle: "Spillerkoder",
     codesHint: "Les koden til en spiller som har mistet sin.",
+    // CodesModal: masked-by-default roster (UX-3).
+    codesWarning: "Koder gir tilgang til elevens økt — ikke vis på storskjerm",
+    tapToReveal: "Trykk for å vise",
+    tapToHide: "Trykk for å skjule",
+    // LobbyView: the host code is never shown by default (UX-2).
+    revealHostCode: "Vis vertskode",
+    hostCodeWarning: "Ikke vis på storskjerm",
     join: "Bli med",
     liveToggle: "Live",
     boardToggle: "Tavle",
     spectateWon: "vant!",
     spectateDraw: "Uavgjort",
     kick: "Kast ut",
-    kickConfirm: "Kaste ut denne spilleren?",
+    kickConfirm: (name: string) => `Kaste ut ${name}?`,
     online: "Tilkoblet",
     offline: "Frakoblet",
     podium: "Vinnere",
@@ -311,6 +331,13 @@ export const no = {
     cupProgress: "Cup-stigen",
     yourTurn: "DIN TUR",
     opponentTurn: "Venter på motstander",
+    // Background "your turn" cue for a hidden/backgrounded tab — see
+    // lib/client/turnCue.ts. Same wording as the in-page `yourTurn` banner
+    // above (this is the browser tab title / notification title version of
+    // the same cue, not a separate message).
+    turnTitle: "DIN TUR",
+    notifyOptIn: "🔔 Varsle meg når det er min tur",
+    notifyBody: "Motstanderen din har trukket – bli med igjen for å spille.",
     boardLabel: "Brettet",
     otherTabTitle: "Du spiller i en annen fane",
     otherTabBody: "Spillet er åpent i en annen fane på denne enheten. For å unngå trøbbel spiller bare én fane om gangen.",

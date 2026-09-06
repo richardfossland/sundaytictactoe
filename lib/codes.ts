@@ -33,6 +33,15 @@ export function generateHostCode(rng: Rng = Math.random): string {
   return generateResumeCode(rng);
 }
 
+/** Mask a resume/host code for display on a shared screen, e.g. "KOLE-7F" →
+ * "••••-••". Every character but the dash becomes a bullet, so the shape (and
+ * therefore "this is a code") stays legible while the value doesn't. Works on
+ * any length/format, not just the 4+2 shape, so it degrades safely if the
+ * generator ever changes. */
+export function maskCode(code: string): string {
+  return code.replace(/[^-]/g, "•");
+}
+
 /** Normalise a user-typed code: uppercase, strip spaces, ensure single dash. */
 export function normalizeResumeCode(input: string): string {
   const cleaned = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
