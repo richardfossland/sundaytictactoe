@@ -122,7 +122,7 @@ describe("POST /api/lobby/rejoin", () => {
     expect(store.setPlayerStatus).toHaveBeenCalledWith(P_ID, "active");
     expect(broadcast).not.toHaveBeenCalled();
     await drainDeferred();
-    expect(broadcast).toHaveBeenCalledWith(`lobby:${T_ID}`, "roster", {
+    expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "roster", {
       joined: P_ID,
     });
   });

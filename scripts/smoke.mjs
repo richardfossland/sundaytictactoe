@@ -63,7 +63,7 @@ async function main() {
   // 2. Subscribe to the game channel BEFORE moving, to catch broadcasts.
   const sb = createClient(URL, ANON);
   const events = [];
-  const channel = sb.channel(`game:${gameId}`, { config: { broadcast: { self: false } } });
+  const channel = sb.channel(`ttt:game:${gameId}`, { config: { broadcast: { self: false } } });
   channel.on("broadcast", { event: "*" }, (m) => events.push(m.event));
   await new Promise((resolve) => {
     channel.subscribe((status) => status === "SUBSCRIBED" && resolve());

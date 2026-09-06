@@ -104,7 +104,7 @@ describe("POST /api/game/draw", () => {
     // R8: the offer is answered before the opponent is notified.
     expect(broadcast).not.toHaveBeenCalled();
     await drainDeferred();
-    expect(broadcast).toHaveBeenCalledWith("game:g1", "draw_offer", { by: "white" });
+    expect(broadcast).toHaveBeenCalledWith("ttt:game:g1", "draw_offer", { by: "white" });
   });
 
   it("accept WITHOUT a pending offer does NOT draw", async () => {

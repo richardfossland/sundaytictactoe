@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ReactionLayer, type FloatingReaction } from "@/lib/client/Reactions";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  REACTION_EMOJIS,
+  ReactionLayer,
+  type FloatingReaction,
+} from "@/lib/client/Reactions";
 import { MoveList, sansFromPgn } from "@/lib/client/MoveList";
 import { MnkBoard } from "@/lib/client/MnkBoard";
 import { findWinLine } from "@/lib/ttt/win";
@@ -12,6 +16,7 @@ import { Confetti, initials } from "@/lib/client/Confetti";
 import { sound } from "@/lib/client/sound";
 import { channels } from "@/lib/realtime";
 import { useChannel } from "@/lib/client/useChannel";
+import { createReactionGate } from "@/lib/realtimeTrust";
 import type { GameStatus } from "@/lib/types";
 import { no } from "@/lib/locale/no";
 
@@ -54,6 +59,7 @@ export function SpectateGame({
   k,
   white,
   black,
+  senders,
   onClose,
   result,
 }: {
@@ -64,6 +70,10 @@ export function SpectateGame({
   k: number;
   white: string;
   black: string;
+  /** Player ids allowed to send a reaction on this channel — the tournament's
+   * roster. Reactions are unauthenticated client→client broadcasts, so an
+   * unknown `by` is somebody who is not in this room. */
+  senders: ReadonlySet<string>;
   onClose: () => void;
   result?: GameStatus | null;
 }) {
@@ -92,10 +102,14 @@ export function SpectateGame({
     setTimeout(() => setFloats((f) => f.filter((r) => r.id !== id)), 2600);
   }, []);
 
+  // Reactions only — the position comes from the parent. Gated exactly like the
+  // player's board (allowlist + known sender + 5/s, lib/realtimeTrust.ts): this
+  // one is on a projector, so a flood here is the most visible of all.
+  const reactionGate = useMemo(() => createReactionGate(REACTION_EMOJIS), []);
   useChannel(channels.game(gameId), (event, payload) => {
     if (event !== "reaction") return;
-    const p = payload as { emoji?: string };
-    if (typeof p.emoji === "string" && p.emoji.length <= 8) addFloat(p.emoji);
+    const emoji = reactionGate(payload, senders);
+    if (emoji) addFloat(emoji);
   });
 
   // subtle tick on each new position (skip the first render)

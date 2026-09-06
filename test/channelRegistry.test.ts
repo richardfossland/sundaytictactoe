@@ -136,6 +136,87 @@ describe("channelRegistry", () => {
     sub.release();
   });
 
+  describe("presence for LATE subscribers (M5)", () => {
+    // track() lives in the SUBSCRIBED callback, so anyone who joins an entry
+    // that is already subscribed has missed it. Nothing polls presence, so a
+    // student who missed it is simply invisible to the host — forever.
+    function trackingDriver() {
+      const created: { topic: string; trackKey: string; ch: ReturnType<typeof fakeChannel> }[] = [];
+      const remove = vi.fn();
+      __setChannelDriver({
+        create: (topic, trackKey) => {
+          const ch = fakeChannel();
+          created.push({ topic, trackKey, ch });
+          return ch as never;
+        },
+        remove,
+      });
+      return { created, remove };
+    }
+
+    it("tracks a sub that joins an already-SUBSCRIBED entry with the SAME key", () => {
+      const { created } = trackingDriver();
+      const s1 = acquireChannel("presence:same", { trackKey: "p1" });
+      expect(created).toHaveLength(1);
+      expect(created[0].ch.track).toHaveBeenCalledTimes(1);
+
+      const s2 = acquireChannel("presence:same", { trackKey: "p1" });
+      expect(created).toHaveLength(1); // same key → no rebuild needed
+      expect(created[0].ch.track).toHaveBeenCalledTimes(2); // …but it DID track
+
+      s1.release();
+      s2.release();
+    });
+
+    it("rebuilds the channel around the key when a keyed sub joins an OBSERVER's entry", () => {
+      const { created } = trackingDriver();
+      // The host (or any broadcast-only consumer) got here first, so the channel
+      // was constructed with the empty observer key — which supabase-js will not
+      // let us change on a live channel.
+      const observer = acquireChannel("presence:obs", {});
+      expect(created[0].trackKey).toBe("");
+
+      const student = acquireChannel("presence:obs", { trackKey: "p9" });
+      expect(created).toHaveLength(2);
+      expect(created[1].trackKey).toBe("p9"); // …created with the right key
+      expect(created[1].ch.track).toHaveBeenCalled();
+      // Both consumers are on the NEW channel; the old one was torn down.
+      expect(student.channel).toBe(created[1].ch as never);
+      const seen: string[] = [];
+      const late = acquireChannel("presence:obs", { onBroadcast: (e) => seen.push(e) });
+      created[1].ch.__emit("roster", {});
+      expect(seen).toEqual(["roster"]);
+
+      observer.release();
+      student.release();
+      late.release();
+    });
+
+    it("a recreate re-tracks EVERY sub that carries a key, not the one frozen at creation", () => {
+      vi.useFakeTimers();
+      const { created } = trackingDriver();
+
+      // Observer first, so the entry's key would have been frozen at "".
+      const observer = acquireChannel("presence:flap", {});
+      const a = acquireChannel("presence:flap", { trackKey: "p1" });
+      const b = acquireChannel("presence:flap", { trackKey: "p1" });
+      const liveIndex = created.length - 1;
+      expect(created[liveIndex].trackKey).toBe("p1");
+
+      // The socket drops; the registry recreates on its own backoff.
+      created[liveIndex].ch.__status("CLOSED");
+      vi.advanceTimersByTime(1000);
+      expect(created).toHaveLength(liveIndex + 2);
+      const fresh = created[liveIndex + 1];
+      expect(fresh.trackKey).toBe("p1"); // re-derived from the subs, not frozen
+      expect(fresh.ch.track).toHaveBeenCalledTimes(2); // once per keyed sub
+
+      observer.release();
+      a.release();
+      b.release();
+    });
+  });
+
   it("sendOnTopic sends on the current channel and no-ops for an unknown topic", () => {
     __setChannelDriver({ create: () => fakeChannel() as never, remove: vi.fn() });
     const sub = acquireChannel("game:send", {});
