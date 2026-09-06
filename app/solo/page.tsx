@@ -1,9 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { applyMove } from "@/lib/ttt/validateMove";
 import type { BotLevel } from "@/lib/ttt/bot";
+import {
+  botSkillForPlayer,
+  INITIAL_RATING,
+  outcomeToScore,
+  skillToParams,
+  updateRating,
+  type RatingState,
+} from "@/lib/ttt/skill";
+import { identity } from "@/lib/client/identity";
 import { requestBotMove } from "@/lib/client/engine";
 import { findWinLine } from "@/lib/ttt/win";
 import { VARIANTS, variantStartState, type MnkVariant } from "@/lib/ttt/variants";
@@ -17,7 +26,11 @@ type Phase = "setup" | "game";
 type Color = "white" | "black"; // white = X (first), black = O (second)
 type Outcome = "win" | "loss" | "draw";
 
-const LEVELS: { key: BotLevel; label: string }[] = [
+/** The four fixed rungs, plus the one that picks its own. */
+type SoloLevel = BotLevel | "adaptive";
+
+const LEVELS: { key: SoloLevel; label: string }[] = [
+  { key: "adaptive", label: no.solo.adaptive },
   { key: "easy", label: no.solo.easy },
   { key: "medium", label: no.solo.medium },
   { key: "hard", label: no.solo.hard },
@@ -31,7 +44,9 @@ function turnOf(state: string): "w" | "b" {
 export default function Solo() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [colorPref, setColorPref] = useState<"white" | "black" | "random">("white");
-  const [level, setLevel] = useState<BotLevel>("medium");
+  // "Tilpasset" is where a new player starts: it is the only setting that does
+  // not ask a child to guess, in advance, how good they are.
+  const [level, setLevel] = useState<SoloLevel>("adaptive");
   const [variant, setVariant] = useState<MnkVariant>(VARIANTS[0]);
   const [playerColor, setPlayerColor] = useState<Color>("white");
 
@@ -47,6 +62,48 @@ export default function Solo() {
   // board it was thinking about is gone.
   const gameSeq = useRef(0);
 
+  // --- adaptive difficulty ---------------------------------------------------
+  //
+  // The rating is READ FROM STORAGE IN AN EFFECT, not in the useState
+  // initializer, because this page is prerendered: the server has no
+  // localStorage, so an initializer would render 800 into the HTML and then a
+  // different number on hydration. Starting both sides at INITIAL_RATING and
+  // correcting on mount keeps the first paint honest.
+  //
+  // `ratingRef` is the source of truth for the update after a game; `rating`
+  // exists only to render the chip. The three refs below are frozen at the
+  // moment a game STARTS: the bot must not change strength halfway through
+  // because the previous result moved the rating, and a game must be scored
+  // against the bot it was actually played against.
+  const ratingRef = useRef<RatingState>(INITIAL_RATING);
+  const [rating, setRating] = useState<RatingState>(INITIAL_RATING);
+  const gameSkill = useRef(botSkillForPlayer(INITIAL_RATING));
+  const gameLevel = useRef<SoloLevel>("adaptive");
+  /** the gameSeq already scored — one rating update per game, never two */
+  const ratedSeq = useRef(-1);
+
+  useEffect(() => {
+    const stored = identity.soloRating();
+    ratingRef.current = stored;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRating(stored);
+  }, []);
+
+  /** Move the rating after an adaptive game. The bot mirrors the player, so a
+   * win pushes the next bot up and a loss pushes it down — that is the whole
+   * auto-tune. Fixed levels are deliberately NOT scored: losing ten in a row to
+   * "Uslåelig" says nothing about the player, and would drag the adaptive bot
+   * down to a level they have already outgrown. */
+  function rate(oc: Outcome) {
+    if (gameLevel.current !== "adaptive") return;
+    if (ratedSeq.current === gameSeq.current) return;
+    ratedSeq.current = gameSeq.current;
+    const next = updateRating(ratingRef.current, gameSkill.current, outcomeToScore(oc));
+    ratingRef.current = next;
+    identity.saveSoloRating(next);
+    setRating(next);
+  }
+
   const myLetter = playerColor === "white" ? "w" : "b";
   const turn = turnOf(state);
   const isMyTurn = !thinking && !outcome && turn === myLetter;
@@ -60,6 +117,7 @@ export default function Solo() {
       oc = winnerColor === playerColor ? "win" : "loss";
     }
     setOutcome(oc);
+    rate(oc);
     sound.play(oc === "win" ? "win" : oc === "loss" ? "lose" : "draw");
     return true;
   }
@@ -75,8 +133,17 @@ export default function Solo() {
     setThinking(true);
     setHistory((h) => [...h, board]);
     try {
+      // On "Tilpasset" the knobs replace the level entirely (chooseMove ignores
+      // `level` whenever params are present); "impossible" is passed only
+      // because the worker's request validator insists on a real level.
+      const lvl = gameLevel.current;
       const [cell] = await Promise.all([
-        requestBotMove(board, variant, level),
+        requestBotMove(
+          board,
+          variant,
+          lvl === "adaptive" ? "impossible" : lvl,
+          lvl === "adaptive" ? skillToParams(gameSkill.current, variant) : undefined,
+        ),
         new Promise((r) => setTimeout(r, 320)),
       ]);
       if (seq !== gameSeq.current) return; // this game is over; drop the reply
@@ -107,6 +174,9 @@ export default function Solo() {
 
   function start() {
     gameSeq.current++;
+    // Freeze the opponent for this game before anything can move the rating.
+    gameLevel.current = level;
+    gameSkill.current = botSkillForPlayer(ratingRef.current);
     const color: Color =
       colorPref === "random" ? (Math.random() < 0.5 ? "white" : "black") : colorPref;
     setPlayerColor(color);
@@ -123,7 +193,13 @@ export default function Solo() {
 
   function undo() {
     if (thinking || history.length === 0) return;
+    // Undoing a FINISHED game carries its "already scored" mark to the new
+    // sequence number, so taking a loss back and playing the same game to a win
+    // cannot be scored twice. Undo before the end (the normal case) leaves the
+    // game unscored and still scorable.
+    const wasRated = ratedSeq.current === gameSeq.current;
     gameSeq.current++;
+    if (wasRated) ratedSeq.current = gameSeq.current;
     const back = history.length >= 2 ? 2 : 1;
     setState(history[history.length - back]);
     setHistory(history.slice(0, history.length - back));
@@ -192,6 +268,14 @@ export default function Solo() {
                 </button>
               ))}
             </div>
+            {level === "adaptive" && (
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <span className="badge">{no.solo.levelChip(rating.rating)}</span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {no.solo.adaptiveNote}
+                </span>
+              </div>
+            )}
             {variant.id === "3x3" && (
               <span className="muted" style={{ fontSize: 12 }}>
                 {no.solo.unbeatable3x3Note}
@@ -298,6 +382,11 @@ export default function Solo() {
             </div>
             <h1 style={{ fontSize: "clamp(34px,8vw,60px)" }}>{outText}</h1>
             <p className="muted">{outSub}</p>
+            {/* `level` cannot change while a game is on screen (it is only
+                settable in setup), so this is the level that was played. */}
+            {level === "adaptive" && (
+              <span className="badge">{no.solo.levelChip(rating.rating)}</span>
+            )}
             <div className="row" style={{ marginTop: 6 }}>
               <button className="btn btn-primary btn-lg" onClick={start}>
                 {no.solo.newGame}

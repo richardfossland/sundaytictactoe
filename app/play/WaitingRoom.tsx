@@ -10,6 +10,7 @@ import { identity, type StoredPlayer } from "@/lib/client/identity";
 import { report } from "@/lib/client/telemetry";
 import { initials } from "@/lib/client/Confetti";
 import { PredictPanel } from "@/lib/client/PredictPanel";
+import { PuzzleCard } from "@/lib/client/PuzzleCard";
 import { BracketBoard } from "@/lib/client/BracketBoard";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
 import { waitingProgress } from "@/lib/tournament/progress";
@@ -426,6 +427,22 @@ export function WaitingRoom({
       {/* something to chew on while waiting */}
       {state && status !== "lobby" && status !== "finished" && (
         <PredictPanel me={me} state={state} />
+      )}
+
+      {/* ...and something for everyone the tipping panel has nothing for.
+          PredictPanel self-hides whenever there is no OTHER live game to bet
+          on — which is exactly the lobby, a bye in a one-game round, the gap
+          between rounds, and every student already knocked out. That left a
+          spinner and a name on the screen and nothing to do. The puzzle card
+          is always solvable, needs no backend, and is the only thing here a
+          waiting student can actually act on.
+
+          Never mounted over a LIVE game: the `activeGameId` branch above
+          returns <GameView> before this point, so reaching here already means
+          the student is not playing. `finished` is excluded on purpose too —
+          the final standings card owns that screen. */}
+      {state && status !== "finished" && (
+        <PuzzleCard variantId={state.tournament.config.variant} />
       )}
       </div>
     </main>

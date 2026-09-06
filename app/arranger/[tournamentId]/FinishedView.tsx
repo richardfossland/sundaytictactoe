@@ -9,6 +9,7 @@ import { SoundToggle } from "@/lib/client/SoundToggle";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { sound } from "@/lib/client/sound";
 import { computeAwards, type Award } from "@/lib/tournament/awards";
+import { variantById } from "@/lib/ttt/variants";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
 import { BracketBoard } from "@/lib/client/BracketBoard";
 import { no } from "@/lib/locale/no";
@@ -16,6 +17,10 @@ import { no } from "@/lib/locale/no";
 const AWARD_EMOJI: Record<Award["key"], string> = {
   fastest_win: "⚡",
   longest_game: "⏳",
+  centre_opener: "🎯",
+  comeback: "🔄",
+  blocker: "🧱",
+  draw_king: "🤝",
 };
 
 function awardDetail(a: Award): string {
@@ -24,6 +29,14 @@ function awardDetail(a: Award): string {
       return `Seier på ${a.value} ${no.awards.movesUnit}`;
     case "longest_game":
       return `${a.value} ${no.awards.movesUnit}`;
+    case "centre_opener":
+      return no.awards.openingsUnit(a.value);
+    case "comeback":
+      return no.awards.comebackUnit(a.value);
+    case "blocker":
+      return no.awards.blocksUnit(a.value);
+    case "draw_king":
+      return no.awards.drawsUnit(a.value);
   }
 }
 
@@ -71,8 +84,12 @@ export function FinishedView({ state }: { state: BoardState }) {
             status: g.status,
             pgn: g.pgn as string,
           })),
+        // Four of the six awards read the BOARD (centre, lines, blocks), so
+        // they need the geometry this tournament was actually played on — a
+        // 4×4 has no single centre cell and needs four in a row, not three.
+        variantById(tournament.config.variant),
       ),
-    [games],
+    [games, tournament.config.variant],
   );
 
   const teamRows = useMemo(

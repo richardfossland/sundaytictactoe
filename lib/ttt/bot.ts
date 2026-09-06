@@ -45,6 +45,25 @@ function maxDepth(level: BotLevel, v: MnkVariant): number {
   return size <= 9 ? 9 : size <= 16 ? 6 : 4;
 }
 
+/** The deepest this bot ever searches on a board — "impossible"'s cap, which is
+ * a FULL search on 3×3 and a bounded one on the bigger boards. The ceiling of
+ * the adaptive ramp in lib/ttt/skill.ts, exported so that ramp cannot drift
+ * away from the level it is supposed to top out at. */
+export function fullDepth(v: MnkVariant): number {
+  return maxDepth("impossible", v);
+}
+
+/** Continuous difficulty knobs, the alternative to a named level. `chooseMove`
+ * takes these INSTEAD of `level` when the caller supplies them; the mapping
+ * from a rating to a pair of values lives in lib/ttt/skill.ts. */
+export interface BotParams {
+  /** negamax depth cap in plies (≥ 1) */
+  maxDepth: number;
+  /** probability in [0,1] of ignoring the search and playing a random legal
+   * cell — an outright blunder */
+  randomMoveProb: number;
+}
+
 // ---------------------------------------------------------------- variant tables
 
 interface VariantTables {
@@ -304,6 +323,8 @@ export function chooseMove(
   variant: MnkVariant = DEFAULT_VARIANT,
   level: BotLevel = "impossible",
   rng: () => number = Math.random,
+  /** Continuous knobs that REPLACE `level` when present (see BotParams). */
+  params?: BotParams,
 ): number | null {
   const empties = emptyCells(state);
   if (empties.length === 0) return null;
@@ -314,7 +335,29 @@ export function chooseMove(
   const me = markFor(turnFromState(state));
   const opp = otherMark(me);
   const board = state.split("");
+  const filled0 = state.length - empties.length;
   const pick = (cells: number[]) => cells[Math.floor(rng() * cells.length)];
+
+  // Continuous difficulty (the "Tilpasset" solo level). Deliberately placed
+  // AHEAD of the level ladder and never falling through into it: the ladder's
+  // exact move for every level, position and rng seed is pinned by the corpus
+  // test, so the only safe way to add a mode is one the ladder never reaches.
+  //
+  // The shape is the ladder's own, with both of its constants made continuous:
+  // blunder first (that is where "easy" spends its rng), then always take a win
+  // and always block a loss, then search to the given cap. At the ends it IS
+  // the ladder — {1, 0.6} is easy's horizon and blunder rate, {fullDepth, 0} is
+  // impossible's.
+  if (params) {
+    const blunder = params.randomMoveProb;
+    if (blunder > 0 && rng() < blunder) return pick(empties);
+    const quickWin = immediateWin(board, variant, me);
+    if (quickWin !== null) return quickWin;
+    const quickBlock = immediateWin(board, variant, opp);
+    if (quickBlock !== null) return quickBlock;
+    const cap = Math.max(1, Math.floor(params.maxDepth));
+    return searchBest(board, variant, me, filled0, cap) ?? pick(empties);
+  }
 
   if (level === "easy") {
     // Deliberately weak: most of the time a random move; otherwise only the most
@@ -336,9 +379,22 @@ export function chooseMove(
 
   if (level === "medium" && rng() < 0.2) return pick(empties);
 
+  return searchBest(board, variant, me, filled0, maxDepth(level, variant)) ?? pick(empties);
+}
+
+/** Run the alpha-beta search to `cap` plies and return its root move (null only
+ * if there was nothing to search). Extracted so the level ladder and the params
+ * path in chooseMove share ONE search — the ladder's behaviour is pinned
+ * ply-for-ply by the corpus in test/ttt.test.ts, and the two must not drift
+ * apart underneath it. */
+function searchBest(
+  board: string[],
+  variant: MnkVariant,
+  me: Mark,
+  filled0: number,
+  cap: number,
+): number | null {
   const t = tablesFor(variant);
-  const cap = maxDepth(level, variant);
-  const filled0 = state.length - empties.length;
   // The heuristic can only fire if the cap is reached before the board fills;
   // when it can't (3×3 searched in full) skip the window bookkeeping entirely.
   const tracking = cap < board.length - filled0;
@@ -360,5 +416,5 @@ export function chooseMove(
     scoreO: seed.o,
   };
   negamax(ctx, me, 0, -1, -Infinity, Infinity);
-  return ctx.rootMove ?? pick(empties);
+  return ctx.rootMove;
 }

@@ -1630,3 +1630,35 @@ a:focus-visible,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 60%, transparent),
     0 6px 24px -8px var(--gold);
 }
+
+/* ---------------------------------------------------------------------------
+   Waiting-room puzzle card (lib/client/PuzzleCard.tsx)
+
+   Both rules here exist to keep the card's own height CONSTANT from the moment
+   it mounts to the moment it is solved — the same discipline the board itself
+   is held to elsewhere in this file.
+
+   .puzzle-board caps the grid so all three variants (3×3, 4×4, 5×5 — every one
+   of them square) occupy the exact same box: switching puzzle never resizes
+   the card. .puzzle-foot reserves the status line whether or not there is
+   anything to say, so the ✓/✗ banner appears IN it rather than pushing the
+   "Neste" button down under the finger that just tapped.
+   --------------------------------------------------------------------------- */
+.puzzle-board {
+  width: 100%;
+  max-width: 260px;
+  margin: 0 auto;
+}
+.puzzle-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.puzzle-foot .banner {
+  /* one line of 13px copy plus the .banner padding — fixed, so the hidden
+     state and both visible states are exactly the same height */
+  min-height: 44px;
+  padding: 12px 14px;
+  font-size: 13px;
+}

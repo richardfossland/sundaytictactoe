@@ -5,9 +5,11 @@
 // refetched from the server on mount.
 
 import { safeGet, safeRemove, safeSet } from "@/lib/client/storage";
+import { clampSkill, INITIAL_RATING, type RatingState } from "@/lib/ttt/skill";
 
 const HOST_KEY = (id: string) => `ttt:host:${id}`;
 const PLAYER_KEY = "ttt:player"; // single active student session per browser
+const SOLO_RATING_KEY = "ttt:solo-rating"; // adaptive solo difficulty, per device
 
 export interface StoredPlayer {
   tournamentId: string;
@@ -42,6 +44,30 @@ export const identity = {
     } catch {
       return null;
     }
+  },
+  /** The device's adaptive single-player rating (Elo-like). Client-only; never
+   *  authoritative, never sent to the server, and deliberately NOT part of the
+   *  tournament identity — logging out of a tournament must not reset how well
+   *  the solo bot has learned to match this child. Falls back to the initial
+   *  rating if absent or corrupt. */
+  soloRating(): RatingState {
+    const raw = safeGet(SOLO_RATING_KEY);
+    if (!raw) return { ...INITIAL_RATING };
+    try {
+      const parsed = JSON.parse(raw) as Partial<RatingState>;
+      const rating = clampSkill(Number(parsed.rating));
+      const games = Number.isFinite(parsed.games)
+        ? Math.max(0, Math.floor(parsed.games as number))
+        : 0;
+      return { rating, games };
+    } catch {
+      return { ...INITIAL_RATING };
+    }
+  },
+  saveSoloRating(state: RatingState) {
+    // Best-effort only: a lost write costs a difficulty setting, not a session,
+    // so this one does NOT warn the way the identity writes above do.
+    safeSet(SOLO_RATING_KEY, JSON.stringify(state));
   },
   clearPlayer() {
     // Persistence lost (private mode / quota / blocked storage) → crash-recovery

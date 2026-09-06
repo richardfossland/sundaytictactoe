@@ -91,3 +91,50 @@ describe("handleBotRequest", () => {
     }
   });
 });
+
+// The adaptive solo level sends its knobs across the same boundary. They are
+// OPTIONAL — an old page talking to a new worker sends none — but a malformed
+// pair must be refused rather than repaired: a NaN depth searches forever and a
+// blunder rate above 1 makes the bot play at random for the rest of the game.
+describe("adaptive params over the wire", () => {
+  it("accepts a request with no params at all", () => {
+    expect(isBotRequest(req())).toBe(true);
+    expect(isBotRequest({ ...req(), params: undefined })).toBe(true);
+  });
+
+  it("accepts a well-formed pair", () => {
+    expect(isBotRequest({ ...req(), params: { maxDepth: 3, randomMoveProb: 0.4 } })).toBe(true);
+    expect(isBotRequest({ ...req(), params: { maxDepth: 1, randomMoveProb: 0 } })).toBe(true);
+    expect(isBotRequest({ ...req(), params: { maxDepth: 9, randomMoveProb: 1 } })).toBe(true);
+  });
+
+  it("rejects a malformed pair instead of repairing it", () => {
+    for (const params of [
+      null,
+      "deep",
+      {},
+      { maxDepth: 3 },
+      { randomMoveProb: 0.4 },
+      { maxDepth: Number.NaN, randomMoveProb: 0.4 },
+      { maxDepth: Number.POSITIVE_INFINITY, randomMoveProb: 0.4 },
+      { maxDepth: 0, randomMoveProb: 0.4 },
+      { maxDepth: 3, randomMoveProb: -0.1 },
+      { maxDepth: 3, randomMoveProb: 1.5 },
+      { maxDepth: "3", randomMoveProb: 0.4 },
+    ]) {
+      expect(isBotRequest({ ...req(), params }), JSON.stringify(params)).toBe(false);
+    }
+  });
+
+  it("runs the search with the params, not the level", () => {
+    const v = variantById("3x3");
+    const params = { maxDepth: 9, randomMoveProb: 0 };
+    const res = handleBotRequest(req({ state: "xx..o....", level: "easy", params }));
+    expect(isErrorResponse(res)).toBe(false);
+    if (isErrorResponse(res)) return;
+    // "easy" would roll a blunder here; the params say never — so it takes the
+    // win on cell 2, exactly as the main thread would.
+    expect(res.move).toBe(chooseMove("xx..o....", v, "easy", Math.random, params));
+    expect(res.move).toBe(2);
+  });
+});
