@@ -159,12 +159,20 @@ export interface DiagnosticsResult {
 }
 
 export function toBoardTournament(t: Tournament) {
+  // `notes` is the teacher's private note to self — this DTO backs the
+  // UNAUTHENTICATED, 5s-polled GET /api/tournament/[id], read by every
+  // student's device as well as the host projector. Strip it here (the one
+  // seam every caller goes through) rather than trusting each call site to
+  // remember not to show it. `config.notes` being optional means the object
+  // without it still satisfies `TournamentConfig` below.
+  const publicConfig: TournamentConfig = { ...t.config };
+  delete publicConfig.notes;
   return {
     id: t.id,
     title: t.title,
     joinPin: t.join_pin,
     status: t.status,
-    config: t.config,
+    config: publicConfig,
     currentRound: t.current_round,
   };
 }

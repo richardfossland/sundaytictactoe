@@ -39,6 +39,16 @@ export async function POST(req: Request) {
   } else {
     config.teams = [];
   }
+  // Teacher's private note-to-self — trim + cap, same as the config route's
+  // own sanitization (app/api/tournament/[id]/config/route.ts); drop it
+  // entirely rather than storing an empty string.
+  if (typeof config.notes === "string") {
+    const trimmed = config.notes.trim().slice(0, 280);
+    if (trimmed) config.notes = trimmed;
+    else delete config.notes;
+  } else {
+    delete config.notes;
+  }
 
   const title = body?.title?.toString().slice(0, 80).trim() || null;
 

@@ -99,6 +99,10 @@ export interface TournamentSummary {
   join_pin: string;
   created_at: string;
   playerCount: number;
+  /** Teacher's private note-to-self (config.notes) — safe here: this page is
+   * read straight off the DB row for the signed-in owner, never through the
+   * public board DTO (see lib/dto.ts's toBoardTournament, which strips it). */
+  notes: string | null;
 }
 
 /** List the tournaments owned by a signed-in host (host_user_id = ownerId),
@@ -110,12 +114,19 @@ export async function listTournamentsByOwner(
   const db = createServiceClient();
   const { data, error } = await db
     .from("tournaments")
-    .select("id, title, status, join_pin, created_at")
+    .select("id, title, status, join_pin, created_at, config")
     .eq("host_user_id", ownerId)
     .order("created_at", { ascending: false })
     .limit(LIST_CAP);
   if (error) throw error;
-  const rows = (data as Omit<TournamentSummary, "playerCount">[]) ?? [];
+  const rawRows =
+    (data as (Omit<TournamentSummary, "playerCount" | "notes"> & {
+      config: TournamentConfig;
+    })[]) ?? [];
+  const rows = rawRows.map(({ config, ...rest }) => ({
+    ...rest,
+    notes: config?.notes ?? null,
+  }));
   warnIfCapped("listTournamentsByOwner", rows.length);
 
   // Player counts in one round-trip per tournament (a host's own list is small).
@@ -205,6 +216,21 @@ export async function updateTournament(
     .single();
   if (error) throw error;
   return data as Tournament;
+}
+
+/** Merge-patch a tournament's jsonb `config` — never a raw replace, so a
+ * caller that only wants to change ONE field (e.g. `notes`) can't silently
+ * wipe out every other setting (rounds, playoff, timer, …) sitting in the same
+ * column. Takes the tournament the caller already has (authHost's return, or
+ * a fresh getTournament) so this doesn't cost a second read just to know the
+ * base to merge onto. */
+export async function updateTournamentConfig(
+  tournament: Tournament,
+  patch: Partial<TournamentConfig>,
+): Promise<Tournament> {
+  return updateTournament(tournament.id, {
+    config: { ...tournament.config, ...patch },
+  });
 }
 
 /** Atomically finish a tournament ONLY if it's still active. Returns the updated

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { waitingProgress } from "@/lib/tournament/progress";
+import { offerSoloWhileWaiting, waitingProgress } from "@/lib/tournament/progress";
 import type { BoardState, PublicGame, PublicPlayer } from "@/lib/dto";
 import type { TournamentConfig, TournamentStatus } from "@/lib/types";
 
@@ -181,5 +181,109 @@ describe("waitingProgress", () => {
   it("no rounds created yet for the current number — defensively returns null", () => {
     const s = state({ status: "league", currentRound: 1, rounds: [] });
     expect(waitingProgress(s, { playerId: ME })).toBeNull();
+  });
+});
+
+describe("offerSoloWhileWaiting", () => {
+  it("lobby — never offered (nothing paired yet)", () => {
+    const s = state({ status: "lobby", currentRound: 0 });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
+  });
+
+  it("finished — never offered (the final-results card owns that screen)", () => {
+    const s = state({ status: "finished", currentRound: 3 });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
+  });
+
+  it("league — live game in progress: not offered", () => {
+    const s = state({
+      status: "league",
+      currentRound: 1,
+      rounds: [{ id: "r1", number: 1, phase: "league", status: "live", startedAt: null, extendedMs: 0 }],
+      games: [game({ id: "g1", roundId: "r1", status: "live" })],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
+  });
+
+  it("league — bye this round: offered", () => {
+    const s = state({
+      status: "league",
+      currentRound: 1,
+      rounds: [{ id: "r1", number: 1, phase: "league", status: "live", startedAt: null, extendedMs: 0 }],
+      games: [game({ id: "g1", roundId: "r1", status: "bye", blackPlayerId: null })],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(true);
+  });
+
+  it("league — finished this round's game early, others still live: offered", () => {
+    const s = state({
+      status: "league",
+      currentRound: 2,
+      rounds: [{ id: "r2", number: 2, phase: "league", status: "live", startedAt: null, extendedMs: 0 }],
+      games: [
+        game({ id: "g1", roundId: "r2", status: "white_win" }),
+        game({ id: "g2", roundId: "r2", whitePlayerId: "a", blackPlayerId: "b", status: "live" }),
+      ],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(true);
+  });
+
+  it("league — no game at all yet: not offered", () => {
+    const s = state({ status: "league", currentRound: 1, rounds: [], games: [] });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
+  });
+
+  it("marked left (walkover / ghost-kick): offered regardless of phase", () => {
+    const s = state({
+      status: "league",
+      currentRound: 1,
+      players: [player(ME, { status: "left" }), player("opp")],
+      rounds: [{ id: "r1", number: 1, phase: "league", status: "live", startedAt: null, extendedMs: 0 }],
+      games: [game({ id: "g1", roundId: "r1", status: "live" })],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(true);
+  });
+
+  it("playoff — eliminated from the current round: offered", () => {
+    const s = state({
+      status: "playoff",
+      currentRound: 2,
+      players: [player("a"), player(ME), player("c"), player("d")],
+      rounds: [
+        { id: "r1", number: 1, phase: "playoff", status: "done", startedAt: null, extendedMs: 0 },
+        { id: "r2", number: 2, phase: "playoff", status: "live", startedAt: null, extendedMs: 0 },
+      ],
+      // ME isn't in round 2 at all — knocked out in round 1.
+      games: [
+        game({ id: "g1", roundId: "r1", whitePlayerId: ME, blackPlayerId: "a", status: "white_win" }),
+        game({ id: "g3", roundId: "r2", whitePlayerId: "c", blackPlayerId: "d", status: "live" }),
+      ],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(true);
+  });
+
+  it("playoff — still in the current round: not offered", () => {
+    const s = state({
+      status: "playoff",
+      currentRound: 1,
+      players: [player("a"), player(ME)],
+      rounds: [{ id: "r1", number: 1, phase: "playoff", status: "live", startedAt: null, extendedMs: 0 }],
+      games: [game({ id: "g1", roundId: "r1", whitePlayerId: ME, blackPlayerId: "a", status: "live" })],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
+  });
+
+  it("playoff — advanced, waiting for the NEXT round to be paired: not offered (a knockout win isn't 'done')", () => {
+    const s = state({
+      status: "playoff",
+      currentRound: 2,
+      players: [player("a"), player(ME)],
+      rounds: [
+        { id: "r1", number: 1, phase: "playoff", status: "done", startedAt: null, extendedMs: 0 },
+        // round 2 hasn't been created/paired yet.
+      ],
+      games: [game({ id: "g1", roundId: "r1", whitePlayerId: ME, blackPlayerId: "a", status: "white_win" })],
+    });
+    expect(offerSoloWhileWaiting(s, ME)).toBe(false);
   });
 });

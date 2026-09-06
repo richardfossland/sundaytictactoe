@@ -13,7 +13,7 @@ import { PredictPanel } from "@/lib/client/PredictPanel";
 import { PuzzleCard } from "@/lib/client/PuzzleCard";
 import { BracketBoard } from "@/lib/client/BracketBoard";
 import { computeTeamStandings, teamColor } from "@/lib/tournament/teams";
-import { waitingProgress } from "@/lib/tournament/progress";
+import { offerSoloWhileWaiting, waitingProgress } from "@/lib/tournament/progress";
 import { RoundTimer } from "@/lib/client/RoundTimer";
 import { resumeTroubleFromStatus } from "@/lib/client/resumeCopy";
 import { no } from "@/lib/locale/no";
@@ -334,6 +334,15 @@ export function WaitingRoom({
   // unconditionally below.
   const progress = state ? waitingProgress(state, { playerId: me.playerId }) : null;
 
+  // Nothing left to do right now (eliminated / bye / finished their league
+  // game early) — offer /solo instead of a bare spinner. Opens in a NEW tab
+  // (see the link below) so the tournament screen is never lost; /solo isn't
+  // a tournament page, so lib/client/useActiveTab.ts's single-tab lock is
+  // never involved.
+  const showSoloWhileWaiting = state
+    ? offerSoloWhileWaiting(state, me.playerId)
+    : false;
+
   const myTeam = meRow?.team ?? null;
 
   return (
@@ -427,6 +436,20 @@ export function WaitingRoom({
       {/* something to chew on while waiting */}
       {state && status !== "lobby" && status !== "finished" && (
         <PredictPanel me={me} state={state} />
+      )}
+
+      {/* eliminated / bye / finished early — nothing left to do right now,
+          so offer a solo game against the computer instead of a bare wait.
+          target="_blank": opening it in THIS tab would lose the tournament
+          screen (and, mid-game, the presence heartbeat). */}
+      {showSoloWhileWaiting && (
+        <div className="card stack" style={{ padding: 14, width: "100%", gap: 8 }}>
+          <p className="eyebrow" style={{ fontSize: 11 }}>{no.player.soloWhileWaitingTitle}</p>
+          <p className="muted" style={{ fontSize: 13 }}>{no.player.soloWhileWaitingBody}</p>
+          <a href="/solo" target="_blank" rel="noopener" className="btn btn-ghost btn-block">
+            {no.player.soloWhileWaitingCta}
+          </a>
+        </div>
       )}
 
       {/* ...and something for everyone the tipping panel has nothing for.
