@@ -7,6 +7,15 @@ import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 // OR playoff (a stuck knockout round can be drawn out; advancePlayoff then
 // applies tiebreak/draw-odds).
 export async function POST(req: Request) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error("[round/force]", err);
+    return fail(503, "server_error");
+  }
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const limited = hostRateLimit(req);
   if (limited) return limited;
   const body = await readJson<{ tournamentId?: string; hostCode?: string }>(req);

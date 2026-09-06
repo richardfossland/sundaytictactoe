@@ -24,8 +24,13 @@ export default function HostEntry() {
       const r = await api.openHost(hostCode);
       router.push(`/arranger/${r.id}`);
     } catch (e) {
+      // Both answers mean the same thing to the teacher: that code opens no
+      // tournament. `not_found` = a well-formed code nobody owns; `invalid_code`
+      // = a code that cannot exist at all (rejected on shape, before the DB), so
+      // a plain typo must NOT fall through to the generic "something went wrong".
       setError(
-        e instanceof ApiError && e.code === "not_found"
+        e instanceof ApiError &&
+          (e.code === "not_found" || e.code === "invalid_code")
           ? no.player.invalidCode
           : no.common.error,
       );

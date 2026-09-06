@@ -7,6 +7,15 @@ import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 // POST /api/round/advance — teacher clicks "Neste runde". Guarded: every game
 // in the current round must be resolved (play it out, override, or force).
 export async function POST(req: Request) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error("[round/advance]", err);
+    return fail(503, "server_error");
+  }
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const limited = hostRateLimit(req);
   if (limited) return limited;
   const body = await readJson<{

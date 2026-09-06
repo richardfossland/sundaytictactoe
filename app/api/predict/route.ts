@@ -6,6 +6,7 @@ import {
 } from "@/lib/server/store";
 import { authPlayer } from "@/lib/server/auth";
 import { clientIp, fail, ok, rateLimit, readJson } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // POST /api/predict — a waiting/eliminated player tips the result of a live
 // game they are NOT playing in. One prediction per (game, player); re-tipping
@@ -44,6 +45,8 @@ async function handlePost(req: Request): Promise<Response> {
   }
 
   if (!body.gameId || !body.predicted) return fail(400, "bad_request");
+  // A malformed gameId is a client error, not an outage (22P02 → false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
   if (!["white", "black", "draw"].includes(body.predicted)) {
     return fail(400, "bad_prediction");
   }

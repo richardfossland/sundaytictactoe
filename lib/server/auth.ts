@@ -2,28 +2,39 @@ import "server-only";
 
 import { createAuthClient } from "@/lib/supabase/auth-server";
 import { getPlayer, getTournament } from "@/lib/server/store";
-import { normalizeResumeCode } from "@/lib/codes";
+import { isUuid, normalizeResumeCode } from "@/lib/codes";
 import type { Player, Tournament } from "@/lib/types";
 
+// SHAPE-CHECK THE ID HERE, NOT IN EVERY CALLER (H2). `getPlayer`/`getTournament`
+// hand the id to Postgres as a uuid; a non-UUID string makes PostgREST throw
+// `22P02 invalid input syntax for type uuid`, which the routes' catch-all turns
+// into a 503 "server_error" — a false outage for what is plainly a client error
+// (a bot probe, a stale link, a truncated localStorage value). One check inside
+// each auth helper gives ELEVEN routes the correct 401 at once, and no caller
+// can forget it. `isUuid` also covers the non-string case, so the previous
+// typeof guard on the id is subsumed.
+
 /** Authenticate a student by their (playerId, resumeCode) bearer pair.
- * Returns the player on success, null otherwise. */
+ * Returns the player on success, null otherwise — including when `playerId`
+ * is not a UUID, which is never a real player and must not reach Postgres. */
 export async function authPlayer(
   playerId: unknown,
   resumeCode: unknown,
 ): Promise<Player | null> {
-  if (typeof playerId !== "string" || typeof resumeCode !== "string") return null;
+  if (!isUuid(playerId) || typeof resumeCode !== "string") return null;
   const player = await getPlayer(playerId);
   if (!player) return null;
   if (player.resume_code !== normalizeResumeCode(resumeCode)) return null;
   return player;
 }
 
-/** Authenticate the teacher for a tournament by its host code. */
+/** Authenticate the teacher for a tournament by its host code. Returns null for
+ * a non-UUID `tournamentId` (see above) rather than letting Postgres throw. */
 export async function authHost(
   tournamentId: unknown,
   hostCode: unknown,
 ): Promise<Tournament | null> {
-  if (typeof tournamentId !== "string" || typeof hostCode !== "string") return null;
+  if (!isUuid(tournamentId) || typeof hostCode !== "string") return null;
   const t = await getTournament(tournamentId);
   if (!t) return null;
   if (t.host_code !== normalizeResumeCode(hostCode)) return null;

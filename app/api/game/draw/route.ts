@@ -5,6 +5,7 @@ import { broadcast } from "@/lib/server/broadcast";
 import { defer } from "@/lib/server/defer";
 import { channels } from "@/lib/realtime";
 import { fail, ok, readJson } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // POST /api/game/draw — draw by agreement, with the pending offer stored in the
 // DB (consistent across Worker isolates — the old in-memory store was not).
@@ -29,6 +30,8 @@ async function handlePost(req: Request): Promise<Response> {
     action?: "offer" | "accept" | "decline";
   }>(req);
   if (!body?.gameId || !body.action) return fail(400, "bad_request");
+  // A malformed gameId is a client error, not an outage (22P02 → false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
 
   const player = await authPlayer(body.playerId, body.resumeCode);
   if (!player) return fail(401, "unauthorized");

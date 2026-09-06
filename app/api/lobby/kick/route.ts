@@ -3,6 +3,7 @@ import { getPlayer, setPlayerStatus } from "@/lib/server/store";
 import { broadcast } from "@/lib/server/broadcast";
 import { channels, events } from "@/lib/realtime";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // POST /api/lobby/kick — host removes a player from the LOBBY (bad/abusive name,
 // or a ghost who left and never came back). Only valid before the tournament
@@ -25,6 +26,10 @@ async function handlePost(req: Request): Promise<Response> {
     playerId?: string;
   }>(req);
   if (!body?.tournamentId || !body.playerId) return fail(400, "bad_request");
+  // `getPlayer` below hands playerId straight to Postgres; a malformed one is a
+  // client error (22P02 → false 503), not a missing player and not an outage.
+  // (tournamentId is shape-checked inside authHost.)
+  if (!isUuid(body.playerId)) return fail(400, "bad_request");
 
   const t = await authHost(body.tournamentId, body.hostCode);
   if (!t) return fail(401, "unauthorized");

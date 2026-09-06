@@ -35,6 +35,10 @@ async function drainDeferred(): Promise<void> {
 
 import { POST } from "@/app/api/game/draw/route";
 
+// Valid-shaped id for the body — the route's isUuid guard runs before the
+// (mocked) getGame, which still returns makeGame()'s own "g1".
+const GAME_ID = "11111111-1111-4111-8111-111111111111";
+
 function makeGame(over: Partial<Game> = {}): Game {
   return {
     id: "g1",
@@ -86,7 +90,7 @@ describe("POST /api/game/draw", () => {
     // 500/1102 HTML page (which the client mis-renders).
     authPlayer.mockResolvedValue(player("white"));
     store.getGame.mockRejectedValue(new Error("db down"));
-    const res = await POST(req({ gameId: "g1", playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
+    const res = await POST(req({ gameId: GAME_ID, playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe("server_error");
   });
@@ -94,7 +98,7 @@ describe("POST /api/game/draw", () => {
   it("offer records the pending offer", async () => {
     authPlayer.mockResolvedValue(player("white"));
     store.getGame.mockResolvedValue(makeGame());
-    const res = await POST(req({ gameId: "g1", playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
+    const res = await POST(req({ gameId: GAME_ID, playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
     expect(res.status).toBe(200);
     expect(store.setDrawOffer).toHaveBeenCalledWith("g1", "white");
     // R8: the offer is answered before the opponent is notified.
@@ -106,7 +110,7 @@ describe("POST /api/game/draw", () => {
   it("accept WITHOUT a pending offer does NOT draw", async () => {
     authPlayer.mockResolvedValue(player("black"));
     store.getGame.mockResolvedValue(makeGame({ draw_offered_by: null }));
-    const res = await POST(req({ gameId: "g1", playerId: "black", resumeCode: "AAAA-AA", action: "accept" }));
+    const res = await POST(req({ gameId: GAME_ID, playerId: "black", resumeCode: "AAAA-AA", action: "accept" }));
     expect(res.status).toBe(409);
     expect(store.resolveGameRpc).not.toHaveBeenCalled();
   });
@@ -114,7 +118,7 @@ describe("POST /api/game/draw", () => {
   it("accept of your OWN offer does NOT draw", async () => {
     authPlayer.mockResolvedValue(player("white"));
     store.getGame.mockResolvedValue(makeGame({ draw_offered_by: "white" }));
-    const res = await POST(req({ gameId: "g1", playerId: "white", resumeCode: "AAAA-AA", action: "accept" }));
+    const res = await POST(req({ gameId: GAME_ID, playerId: "white", resumeCode: "AAAA-AA", action: "accept" }));
     expect(res.status).toBe(409);
     expect(store.resolveGameRpc).not.toHaveBeenCalled();
   });
@@ -122,7 +126,7 @@ describe("POST /api/game/draw", () => {
   it("accept of the OPPONENT's offer resolves a draw (require_live)", async () => {
     authPlayer.mockResolvedValue(player("black"));
     store.getGame.mockResolvedValue(makeGame({ draw_offered_by: "white" }));
-    const res = await POST(req({ gameId: "g1", playerId: "black", resumeCode: "AAAA-AA", action: "accept" }));
+    const res = await POST(req({ gameId: GAME_ID, playerId: "black", resumeCode: "AAAA-AA", action: "accept" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "draw" });
     expect(store.resolveGameRpc).toHaveBeenCalledWith("g1", "draw", "play", true);

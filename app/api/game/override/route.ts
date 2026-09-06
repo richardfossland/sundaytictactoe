@@ -2,6 +2,7 @@ import { authHost } from "@/lib/server/auth";
 import { getGame, resolveGameRpc } from "@/lib/server/store";
 import { afterGameResolved } from "@/lib/server/gameEvents";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 import type { GameStatus } from "@/lib/types";
 
 const ALLOWED: GameStatus[] = ["white_win", "black_win", "draw", "aborted"];
@@ -27,6 +28,8 @@ async function handlePost(req: Request): Promise<Response> {
   if (!body?.gameId || !body.result || !ALLOWED.includes(body.result)) {
     return fail(400, "bad_request");
   }
+  // A malformed gameId is a client error, not an outage (22P02 → false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
 
   const game = await getGame(body.gameId);
   if (!game) return fail(404, "no_game");

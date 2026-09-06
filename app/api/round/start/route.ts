@@ -7,6 +7,15 @@ import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 // POST /api/round/start — organizer starts the tournament: league round 1, or
 // straight into the knockout bracket when format = "cup".
 export async function POST(req: Request) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error("[round/start]", err);
+    return fail(503, "server_error");
+  }
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const limited = hostRateLimit(req);
   if (limited) return limited;
   const body = await readJson<{ tournamentId?: string; hostCode?: string }>(req);

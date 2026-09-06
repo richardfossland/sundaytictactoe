@@ -1,6 +1,7 @@
 import { rematchCasual } from "@/lib/server/casual";
 import { authPlayer } from "@/lib/server/auth";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // POST /api/casual/rematch — either player in a finished casual 1v1 starts a
 // rematch (new game, swapped colours, same throwaway session). Idempotent: both
@@ -26,11 +27,13 @@ async function handlePost(req: Request): Promise<Response> {
 
   const player = await authPlayer(body?.playerId, body?.resumeCode);
   if (!player) return fail(401, "unauthorized");
-  if (!body?.tournamentId || player.tournament_id !== body.tournamentId) {
-    return fail(403, "forbidden");
-  }
+  // `rematchCasual` hands the tournamentId to Postgres; a malformed one is a
+  // client error (22P02 → false 503), not a permissions problem.
+  const tournamentId = body?.tournamentId;
+  if (!isUuid(tournamentId)) return fail(400, "bad_request");
+  if (player.tournament_id !== tournamentId) return fail(403, "forbidden");
 
-  const res = await rematchCasual(body.tournamentId, player.id);
+  const res = await rematchCasual(tournamentId, player.id);
   if (!res.ok) {
     const map = {
       not_found: [404, "not_found"],
