@@ -66,6 +66,17 @@ Run all migrations against the `tictactoe` schema (`0000` through the latest,
 `0011_grants.sql` included) — see `docs/RIG-TEST.md` for the provisioning
 steps.
 
+👤 **Run `0013_revoke_cleanup_exec_casual_guard.sql` after `0012_client_events.sql`.**
+It revokes the anon/authenticated `EXECUTE` grant that 0011's blanket
+`grant all on all routines in schema tictactoe to anon, authenticated` handed
+`tictactoe.cleanup_old_tournaments()` / `tictactoe.cleanup_client_events()`
+(both `security definer`, both otherwise callable via
+`POST /rest/v1/rpc/cleanup_old_tournaments` with the public anon key), and
+re-defines `cleanup_old_tournaments()` so a casual 1v1 session is never
+deleted while one of its games is still `live`, with the casual retention
+window raised from 1 day to 7. See the migration file's header comment for the
+full findings.
+
 > Note: the in-memory rate-limiter and draw-offer store assume a single
 > instance. Cloudflare may run multiple isolates — see the hardening notes in
 > `lib/server/http.ts` before relying on them at scale.
