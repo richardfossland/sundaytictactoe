@@ -118,6 +118,18 @@ export function arePropsEqual(
   );
 }
 
+/** Which line a `winLine` describes, in the wording a screen-reader announcement
+ * needs ("rad 2", "kolonne 3", "diagonal") — a row/column win reads out its own
+ * 1-based index; a diagonal has no single row or column, so it just says which
+ * kind it is. Exported for a unit test; pure, no DOM. */
+export function describeWinLine(winLine: readonly number[], n: number): string {
+  const rows = winLine.map((i) => Math.floor(i / n));
+  const cols = winLine.map((i) => i % n);
+  if (rows.every((r) => r === rows[0])) return `rad ${rows[0] + 1}`;
+  if (cols.every((c) => c === cols[0])) return `kolonne ${cols[0] + 1}`;
+  return "diagonal";
+}
+
 /** A pure CSS-grid m×n board. Replaces react-chessboard everywhere — far simpler
  * (no SSR dance, no piece sprites). X and O are rendered as glyphs. */
 function MnkBoardImpl({
@@ -147,43 +159,73 @@ function MnkBoardImpl({
     gridTemplateColumns: `repeat(${n}, 1fr)`,
     aspectRatio: `${n} / ${m}`,
   };
+  // Announced once a win lands — "✕ vant med rad 2" — via a visually-hidden
+  // aria-live region (below), not the cells' own aria-labels: a screen reader
+  // user tabbing the board should get this exactly once, not on every cell.
+  const winAnnouncement = winLine && winLine.length > 0
+    ? (() => {
+        const winnerMark = state[winLine[0]];
+        const glyph = winnerMark === "x" ? "✕" : winnerMark === "o" ? "◯" : "";
+        return `${glyph} vant med ${describeWinLine(winLine, n)}`;
+      })()
+    : "";
   return (
-    <div className={`mnk mnk-${size}`} style={style} role="grid" aria-label="Brett">
-      {Array.from({ length: m * n }, (_, i) => {
-        const mark = state[i];
-        const filled = mark === "x" || mark === "o";
-        const clickable = !!onCell && !disabled && !filled;
-        return (
-          <button
-            key={i}
-            type="button"
-            // Stable test hooks. `data-cell` is the grid index and `data-mark`
-            // is "x"/"o"/"" — attributes only, read by e2e/pages/board.ts, so a
-            // restyle (class names) or a copy pass (aria-label) cannot move
-            // them. `i` is a number: cell 0 renders `data-cell="0"`, not a
-            // missing attribute the way a falsy boolean would.
-            data-cell={i}
-            data-mark={filled ? mark : ""}
-            className={[
-              "mnk-cell",
-              filled ? `mnk-${mark}` : "mnk-empty",
-              winSet?.has(i) ? "mnk-win" : "",
-              lastCell === i ? "mnk-last" : "",
-              clickable ? "mnk-clickable" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            onClick={clickable ? () => handleCell(i) : undefined}
-            disabled={!clickable}
-            aria-label={
-              filled ? (mark === "x" ? "X" : "O") : `Tom rute ${i + 1}`
-            }
-          >
-            <span className="mnk-glyph">{mark === "x" ? "✕" : mark === "o" ? "◯" : ""}</span>
-          </button>
-        );
-      })}
-    </div>
+    <>
+      {/* Not `role="grid"`: that ARIA pattern promises arrow-key navigation
+          between cells, which this board doesn't implement (Tab order over
+          plain buttons is the actual interaction) — a role this board can't
+          back up would be worse than none. A plain labelled group is the
+          simpler, honest description of what's here. */}
+      <div className={`mnk mnk-${size}`} style={style} role="group" aria-label="Brett">
+        {Array.from({ length: m * n }, (_, i) => {
+          const mark = state[i];
+          const filled = mark === "x" || mark === "o";
+          const clickable = !!onCell && !disabled && !filled;
+          const row = Math.floor(i / n) + 1;
+          const col = (i % n) + 1;
+          const markLabel = mark === "x" ? "✕" : mark === "o" ? "◯" : "tom";
+          return (
+            <button
+              key={i}
+              type="button"
+              // Stable test hooks. `data-cell` is the grid index and `data-mark`
+              // is "x"/"o"/"" — attributes only, read by e2e/pages/board.ts, so a
+              // restyle (class names) or a copy pass (aria-label) cannot move
+              // them. `i` is a number: cell 0 renders `data-cell="0"`, not a
+              // missing attribute the way a falsy boolean would.
+              data-cell={i}
+              data-mark={filled ? mark : ""}
+              className={[
+                "mnk-cell",
+                filled ? `mnk-${mark}` : "mnk-empty",
+                winSet?.has(i) ? "mnk-win" : "",
+                lastCell === i ? "mnk-last" : "",
+                clickable ? "mnk-clickable" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              // aria-disabled, never the native `disabled`: a filled cell or a
+              // board that isn't your turn to play still belongs in the tab
+              // order and stays readable by a screen reader — `disabled` would
+              // pull it out of both, and on a live board that flips every
+              // turn, it would also throw focus away from wherever the player
+              // was. The guard below is what actually keeps a non-clickable
+              // cell inert.
+              aria-disabled={!clickable}
+              onClick={() => {
+                if (clickable) handleCell(i);
+              }}
+              aria-label={`rad ${row}, kolonne ${col} — ${markLabel}`}
+            >
+              <span className="mnk-glyph">{mark === "x" ? "✕" : mark === "o" ? "◯" : ""}</span>
+            </button>
+          );
+        })}
+      </div>
+      <span className="visually-hidden" role="status" aria-live="polite">
+        {winAnnouncement}
+      </span>
+    </>
   );
 }
 

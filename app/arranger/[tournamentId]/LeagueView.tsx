@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { BoardState, PublicGame } from "@/lib/dto";
+import { resultSourceLabel, type BoardState, type PublicGame } from "@/lib/dto";
 import { api } from "@/lib/client/api";
 import { identity } from "@/lib/client/identity";
 import { no } from "@/lib/locale/no";
@@ -214,7 +214,9 @@ export function LeagueView({
                 <th>{no.host.rank}</th>
                 <th>{no.host.name}</th>
                 <th className="num">{no.host.score}</th>
-                <th className="num">{no.host.tiebreak}</th>
+                <th className="num" title={no.host.tiebreakHelp}>
+                  {no.host.tiebreak}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -356,6 +358,16 @@ export function LeagueView({
                   className={`badge ${g.status === "live" ? "badge-live" : "badge-done"}`}
                 >
                   {resultLabel(g, nameById)}
+                  {/* Fair-play readout — only ever set for a decided game whose
+                      result wasn't ordinary play (walkover/override/timeout/absent). */}
+                  {g.resultSource && resultSourceLabel(g.resultSource) && (
+                    <span
+                      className="result-marker"
+                      title={no.host.resultSourceTitle[g.resultSource] ?? ""}
+                    >
+                      {resultSourceLabel(g.resultSource)}
+                    </span>
+                  )}
                 </span>
               </button>
             ))}

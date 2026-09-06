@@ -89,6 +89,7 @@ export function PredictPanel({
                 key={key}
                 className={`btn grow ${picks[g.id] === key ? "btn-primary" : "btn-ghost"}`}
                 style={{ padding: "8px 6px", fontSize: 13 }}
+                aria-pressed={picks[g.id] === key}
                 onClick={() => tip(g.id, key)}
               >
                 {glyph && <span className="faint" style={{ marginRight: 4 }}>{glyph}</span>}

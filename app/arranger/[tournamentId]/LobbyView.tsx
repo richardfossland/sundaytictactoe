@@ -334,11 +334,10 @@ export function LobbyView({
                     <span className="avatar">{initials(p.displayName)}</span>
                     {p.displayName}
                     {p.team && (
-                      <span
-                        className="team-dot"
-                        title={p.team}
-                        style={{ background: teamColor(p.team), marginLeft: 2 }}
-                      />
+                      <span className="team-chip" style={{ marginLeft: 2 }}>
+                        <span className="team-dot" style={{ background: teamColor(p.team) }} />
+                        {p.team}
+                      </span>
                     )}
                     <button
                       className="chip-kick"

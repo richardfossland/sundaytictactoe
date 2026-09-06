@@ -17,6 +17,7 @@ import { requestBotMove } from "@/lib/client/engine";
 import { findWinLine } from "@/lib/ttt/win";
 import { VARIANTS, variantStartState, type MnkVariant } from "@/lib/ttt/variants";
 import { Confetti } from "@/lib/client/Confetti";
+import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
 import { MnkBoard } from "@/lib/client/MnkBoard";
 import { SoundToggle } from "@/lib/client/SoundToggle";
 import { sound } from "@/lib/client/sound";
@@ -55,6 +56,10 @@ export default function Solo() {
   const [lastCell, setLastCell] = useState<number | null>(null);
   const [thinking, setThinking] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // "Nytt parti" mid-game asks first — only when there's an actual game in
+  // progress to lose (start() below resets the board with no way back).
+  // Port of sundaychess#107.
+  const [confirmNewGame, setConfirmNewGame] = useState(false);
 
   // Bumped whenever the position the bot was asked about stops being the
   // position on screen (new game, undo, variant switch). A reply carrying an old
@@ -227,6 +232,7 @@ export default function Solo() {
                 <button
                   key={c}
                   className={`btn grow ${colorPref === c ? "btn-primary" : "btn-ghost"}`}
+                  aria-pressed={colorPref === c}
                   onClick={() => setColorPref(c)}
                 >
                   {c === "white" ? `✕ ${no.solo.white}` : c === "black" ? `◯ ${no.solo.black}` : no.solo.random}
@@ -243,6 +249,7 @@ export default function Solo() {
                   key={v.id}
                   className={`btn ${variant.id === v.id ? "btn-primary" : "btn-ghost"}`}
                   style={{ padding: "10px 8px" }}
+                  aria-pressed={variant.id === v.id}
                   onClick={() => {
                     gameSeq.current++;
                     setVariant(v);
@@ -262,6 +269,7 @@ export default function Solo() {
                   key={l.key}
                   className={`btn ${level === l.key ? "btn-primary" : "btn-ghost"}`}
                   style={{ padding: "10px 8px" }}
+                  aria-pressed={level === l.key}
                   onClick={() => setLevel(l.key)}
                 >
                   {l.label}
@@ -362,10 +370,18 @@ export default function Solo() {
         </div>
 
         <div className="row">
-          <button className="btn btn-ghost" onClick={undo} disabled={thinking}>
+          <button
+            className="btn btn-ghost"
+            onClick={undo}
+            disabled={thinking || history.length === 0}
+          >
             ↶ {no.solo.undo}
           </button>
-          <button className="btn" onClick={start} disabled={thinking}>
+          <button
+            className="btn"
+            onClick={() => (!outcome && history.length > 0 ? setConfirmNewGame(true) : start())}
+            disabled={thinking}
+          >
             {no.solo.newGame}
           </button>
           <Link href="/" className="btn btn-ghost">
@@ -373,6 +389,18 @@ export default function Solo() {
           </Link>
         </div>
       </div>
+
+      {confirmNewGame && (
+        <ConfirmDialog
+          message={no.solo.newGameConfirm}
+          confirmLabel={no.solo.newGame}
+          onConfirm={() => {
+            setConfirmNewGame(false);
+            start();
+          }}
+          onCancel={() => setConfirmNewGame(false)}
+        />
+      )}
 
       {outcome && (
         <div className="result-overlay">

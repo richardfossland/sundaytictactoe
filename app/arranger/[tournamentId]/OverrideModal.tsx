@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { api } from "@/lib/client/api";
 import { ConfirmDialog } from "@/lib/client/ConfirmDialog";
+import { Modal } from "@/lib/client/Modal";
 import { no } from "@/lib/locale/no";
 import type { GameStatus } from "@/lib/types";
 
@@ -66,26 +67,17 @@ export function OverrideModal({
   const askAbsent = (playerId: string, message: string) =>
     setPending({ message, danger: true, run: () => markAbsent(playerId) });
 
+  const titleId = useId();
+
   return (
     <>
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.6)",
-        backdropFilter: "blur(4px)",
-        display: "grid",
-        placeItems: "center",
-        padding: 20,
-        zIndex: 50,
-      }}
+    <Modal
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      cardClassName="card stack scale-in card-narrow"
     >
-      <div
-        className="card stack scale-in card-narrow"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ fontSize: 20 }}>{no.host.overrideTitle}</h3>
+        <h3 id={titleId} style={{ fontSize: 20 }}>{no.host.overrideTitle}</h3>
         <p className="muted">
           {white.name} {no.player.vs} {black?.name ?? no.host.bye}
         </p>
@@ -163,10 +155,9 @@ export function OverrideModal({
         <button className="btn btn-ghost btn-block" onClick={onClose}>
           {no.common.cancel}
         </button>
-      </div>
-    </div>
+    </Modal>
 
-    {/* Rendered as a SIBLING of the backdrop above, not nested inside it — the
+    {/* Rendered as a SIBLING of Modal above, not nested inside it — the
         backdrop's onClick={onClose} would otherwise catch the bubbled click
         from ConfirmDialog's own backdrop and close this whole modal too when
         the teacher only meant to cancel the confirmation. */}

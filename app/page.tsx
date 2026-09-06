@@ -61,12 +61,34 @@ export default function Landing() {
           </Link>
         </div>
 
-        {/* Discreet entry to the OPTIONAL Sunday Account host dashboard. Anonymous
-            arrangører use "Jeg arrangerer" above and never need to sign in. */}
+        {/* "Slik funker det" — a plain 3-step strip so a first-time visitor
+            (who has never seen a tournament PIN before) knows what they're
+            about to click into, plus the reassurance line addressing the
+            usual teacher worries (cost, accounts, device support, time). */}
+        <div className="reveal" style={r(7, { marginTop: 8, width: "100%" })}>
+          <p className="eyebrow" style={{ marginBottom: 10 }}>{no.landing.howTitle}</p>
+          <div
+            className="row"
+            style={{ gap: 8, flexWrap: "wrap", justifyContent: "center", fontSize: 14 }}
+          >
+            <span className="faint">1. {no.landing.step1}</span>
+            <span className="muted">→</span>
+            <span className="faint">2. {no.landing.step2}</span>
+            <span className="muted">→</span>
+            <span className="faint">3. {no.landing.step3}</span>
+          </div>
+          <p className="faint" style={{ marginTop: 10, fontSize: 12 }}>
+            {no.landing.reassurance}
+          </p>
+        </div>
+
+        {/* Discreet entry to the OPTIONAL Sunday Account host dashboard.
+            Anonymous arrangører use "Jeg arrangerer" above and never need to
+            sign in. */}
         <Link
           href="/host"
           className="faint reveal"
-          style={r(7, { fontSize: 12, textDecoration: "none", marginTop: 6 })}
+          style={r(8, { fontSize: 12, textDecoration: "none", marginTop: 6 })}
         >
           {no.hostAuth.landingLink}
         </Link>
