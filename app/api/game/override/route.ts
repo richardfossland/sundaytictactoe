@@ -1,6 +1,7 @@
 import { authHost } from "@/lib/server/auth";
 import { getGame, resolveGameRpc } from "@/lib/server/store";
 import { afterGameResolved } from "@/lib/server/gameEvents";
+import { defer } from "@/lib/server/defer";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 import { isUuid } from "@/lib/codes";
 import type { GameStatus } from "@/lib/types";
@@ -41,9 +42,12 @@ async function handlePost(req: Request): Promise<Response> {
   // (the absent route guards byes too). Reject rather than corrupt standings.
   if (game.status === "bye") return fail(409, "cannot_override_bye");
 
-  const result = await resolveGameRpc(game.id, body.result, "teacher_override");
+  const newStatus = body.result;
+  const result = await resolveGameRpc(game.id, newStatus, "teacher_override");
   if (!result.ok) return fail(409, result.conflict ?? "conflict");
 
-  await afterGameResolved(game, body.result, "teacher_override");
-  return ok({ status: body.result });
+  // M1: the result is committed; scoring + broadcasts are a hint layer, so
+  // they run after the response (see lib/server/defer.ts).
+  defer(() => afterGameResolved(game, newStatus, "teacher_override"), "override");
+  return ok({ status: newStatus });
 }

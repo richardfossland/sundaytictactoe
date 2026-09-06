@@ -7,6 +7,21 @@ vi.mock("@/lib/server/store", () => ({
   openTournamentByHostCode: (...a: unknown[]) => openTournamentByHostCode(...a),
 }));
 
+// H5: this route now draws on BOTH its own `open:` bucket AND the shared host
+// bucket (hostRateLimit) — mock both so each can be forced independently.
+const { rateLimitMock, hostRateLimitMock } = vi.hoisted(() => ({
+  rateLimitMock: vi.fn().mockReturnValue(true),
+  hostRateLimitMock: vi.fn().mockReturnValue(null),
+}));
+vi.mock("@/lib/server/http", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/server/http")>();
+  return {
+    ...actual,
+    rateLimit: (...a: unknown[]) => rateLimitMock(...a),
+    hostRateLimit: (...a: unknown[]) => hostRateLimitMock(...a),
+  };
+});
+
 import { POST } from "@/app/api/tournament/open/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
@@ -35,6 +50,8 @@ const req = (body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  rateLimitMock.mockReturnValue(true);
+  hostRateLimitMock.mockReturnValue(null);
   openTournamentByHostCode.mockResolvedValue(tournament());
 });
 
@@ -84,5 +101,39 @@ describe("POST /api/tournament/open", () => {
     const res = await POST(req({ hostCode: "HOST-01" }));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe("server_error");
+  });
+
+  // H5: the shape check must be decided BEFORE either rate limiter is touched,
+  // so a garbage guess can never spend budget in the SHARED host bucket that
+  // override/absent/extend/kick also draw from.
+  it("checks the code SHAPE before touching either rate limiter", async () => {
+    const res = await POST(req({ hostCode: "not a real code" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_code");
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(hostRateLimitMock).not.toHaveBeenCalled();
+  });
+
+  // H5: own bucket (20/min) — independent of the shared host bucket.
+  it("429s on its own `open:` bucket", async () => {
+    rateLimitMock.mockReturnValueOnce(false);
+    const res = await POST(req({ hostCode: "HOST-01" }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+    expect(hostRateLimitMock).not.toHaveBeenCalled();
+    expect(openTournamentByHostCode).not.toHaveBeenCalled();
+  });
+
+  // H5: this route searches EVERY tournament (including one row per casual
+  // game) — the best host-code brute-force oracle in the app — so it now
+  // ALSO draws on the shared host bucket, even when its own bucket has room.
+  it("429s on the SHARED host bucket even when its own bucket has room", async () => {
+    hostRateLimitMock.mockReturnValueOnce(
+      Response.json({ error: "rate_limited" }, { status: 429 }),
+    );
+    const res = await POST(req({ hostCode: "HOST-01" }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+    expect(openTournamentByHostCode).not.toHaveBeenCalled();
   });
 });

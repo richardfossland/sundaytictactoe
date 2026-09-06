@@ -23,6 +23,20 @@ vi.mock("@/lib/server/broadcast", () => ({
   broadcast: (...a: unknown[]) => broadcast(...a),
 }));
 
+// M1: scoring + the roster nudge are handed to defer() and run after the response.
+const { deferred } = vi.hoisted(() => ({
+  deferred: [] as Array<() => Promise<void>>,
+}));
+vi.mock("@/lib/server/defer", () => ({
+  defer: (task: () => Promise<void>) => {
+    deferred.push(task);
+  },
+}));
+async function drainDeferred(): Promise<void> {
+  const queue = deferred.splice(0);
+  for (const task of queue) await task();
+}
+
 import { POST } from "@/app/api/game/absent/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
@@ -73,6 +87,7 @@ const good = { gameId: G_ID, hostCode: HOST, absentPlayerId: WHITE };
 beforeEach(() => {
   vi.clearAllMocks();
   __resetRateLimiter();
+  deferred.length = 0;
   getGame.mockResolvedValue(game());
   getTournament.mockResolvedValue(tournament());
   resolveGameRpc.mockResolvedValue({ ok: true });
@@ -82,19 +97,26 @@ beforeEach(() => {
 });
 
 describe("POST /api/game/absent", () => {
-  it("gives the present opponent a walkover WIN (not a draw)", async () => {
+  it("gives the present opponent a walkover WIN and scores after responding (M1)", async () => {
     const res = await POST(req(good));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "black_win", scope: "round" });
     expect(resolveGameRpc).toHaveBeenCalledWith(G_ID, "black_win", "walkover", true);
     expect(setPlayerStatus).not.toHaveBeenCalled(); // scope 'round' keeps them
+    expect(afterGameResolved).not.toHaveBeenCalled();
+    await drainDeferred();
+    expect(afterGameResolved).toHaveBeenCalledOnce();
   });
 
-  it("scope 'tournament' also marks the player as left", async () => {
+  it("scope 'tournament' also marks the player as left; roster nudge deferred (M1)", async () => {
     const res = await POST(req({ ...good, scope: "tournament" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "black_win", scope: "tournament" });
+    // the status write is a real state mutation — stays awaited, unlike the
+    // broadcast below, which is a pure hint.
     expect(setPlayerStatus).toHaveBeenCalledWith(WHITE, "left");
+    expect(broadcast).not.toHaveBeenCalled();
+    await drainDeferred();
     expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "tournament", {
       playerLeft: WHITE,
     });

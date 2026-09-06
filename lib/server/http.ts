@@ -76,8 +76,17 @@ export function __bucketCount(): number {
  * the only secret protecting a tournament's resume codes (≈270M-code space), and
  * those routes had NO throttle — a student who knows their tournament id could
  * brute-force it to harvest classmates' bearer tokens. 90/min per IP is far more
- * than any real teacher clicks, but caps brute-forcing at ~90/min (millennia for
- * the full space). Returns a 429 Response when over the cap, else null. */
+ * than any real teacher clicks, but it is honestly a PER-ISOLATE × PER-SOURCE-IP
+ * bound, not a hard ceiling on brute force: the bucket Map above lives in one
+ * Worker isolate, so a request that lands on a different isolate (Cloudflare
+ * spins up more under load, or routes to another PoP) gets its own untouched
+ * bucket, and an attacker spread across N source IPs multiplies this bound by
+ * N. It is a real deterrent — a single well-behaved teacher never gets near it,
+ * and one script from one IP is capped at ~90/min (millennia for the full
+ * space) — but not a guarantee against a distributed attempt. The honest fix is
+ * a shared store all isolates read/write (edge KV or a Durable Object); see
+ * the "Rate limiting" note in docs/RIG-TEST.md. Returns a 429 Response when
+ * over the cap, else null. */
 export function hostRateLimit(req: Request): Response | null {
   if (!rateLimit(`host:${clientIp(req)}`, 90, 60_000)) {
     return fail(429, "rate_limited");

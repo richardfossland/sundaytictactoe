@@ -58,6 +58,10 @@ async function handleResume(req: Request): Promise<Response> {
 
   // Close a stale (abandoned-overnight) tournament before reporting status, so a
   // student resuming the next morning sees it finished — never a zombie board.
+  // M1: kept AWAITED, unlike the other side-effects this PR moved to defer() —
+  // the response below returns `fresh.id`/`fresh.status`, i.e. it DEPENDS on
+  // the (possibly just-flipped) result, so there is nothing to respond with
+  // until this resolves.
   const fresh = await maybeAutoFinishStale(tournament);
 
   return ok({

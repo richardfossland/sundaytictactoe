@@ -1,6 +1,7 @@
 import { addPlayer, getTournamentByPin } from "@/lib/server/store";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
 import { broadcast } from "@/lib/server/broadcast";
+import { defer } from "@/lib/server/defer";
 import { channels, events } from "@/lib/realtime";
 import { isValidPin } from "@/lib/codes";
 
@@ -34,7 +35,12 @@ async function handlePost(req: Request): Promise<Response> {
 
   try {
     const player = await addPlayer(t.id, displayName, t.config.teams ?? []);
-    await broadcast(channels.lobby(t.id), events.roster, { joined: player.id });
+    // M1: the roster nudge is a hint layer (clients also poll/refetch), so it
+    // runs after the response instead of holding the new player's join up.
+    defer(
+      () => broadcast(channels.lobby(t.id), events.roster, { joined: player.id }),
+      "join:roster",
+    );
     return ok({
       tournamentId: t.id,
       playerId: player.id,

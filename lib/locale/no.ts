@@ -111,6 +111,12 @@ export const no = {
 
   host: {
     createTitle: "Ny turnering",
+    quickStart: "Rask start",
+    customize: "Tilpass turnering …",
+    // Auto-title for "Rask start" — becomes "Turnering DD.MM" (see
+    // app/arranger/page.tsx). Kept as a plain prefix so the date formatting
+    // (which isn't language content) stays out of the locale file.
+    quickStartTitlePrefix: "Turnering",
     enterTitle: "Åpne turnering",
     enterPrompt: "Skriv vertskoden for å åpne tavla igjen",
     hostCodeLabel: "Vertskode",
@@ -128,6 +134,8 @@ export const no = {
     name: "Navn",
     score: "Poeng",
     tiebreak: "Buchholz",
+    tiebreakHelp:
+      "Summen av motstandernes poeng — skiller spillere med like mange poeng.",
     round: "Runde",
     games: "Partier",
     nextRound: "Neste runde",
@@ -250,6 +258,14 @@ export const no = {
     reviewFormat: "Form",
     roundsStep: "Antall ligarunder",
     roundsHint: "Sveitsisk system — anbefalt 5",
+    roundsRuleOfThumb: "Tommelfingerregel: færre runder enn spillere",
+    roundsFewer: "Færre runder",
+    roundsMore: "Flere runder",
+    // Player-count-aware warning for lib/tournament/roundsAdvice.ts — not
+    // wired into any screen yet (the wizard runs before anyone has joined,
+    // so it has no roster to check against; see that file's doc comment).
+    roundsWarningRematch: (rounds: number, players: number) =>
+      `Med ${rounds} runder og ${players} spillere vil noen møtes to ganger.`,
     playoffStep: "Sluttspill?",
     playoffOn: "Med sluttspill",
     playoffOff: "Bare liga",
@@ -278,6 +294,7 @@ export const no = {
       "5x5": "Stort brett – fire på rad på 5×5, sjelden uavgjort",
     } as Record<string, string>,
     reviewStep: "Se over",
+    edit: "Endre",
     reviewRounds: "Ligarunder",
     reviewPlayoff: "Sluttspill",
     reviewTimer: "Rundetimer",
@@ -326,7 +343,8 @@ export const no = {
     resume: "Gjenoppta",
     waitingStart: "Venter på at arrangøren starter …",
     waitingNext: "Venter på neste motstander …",
-    waitingBye: "Du har frirunde — slapp av til neste runde 🎉",
+    waitingBye:
+      "Du har frirunde denne runden og får 1 poeng gratis 🎉 Slapp av til neste runde.",
     outOfTournament: "Du er ute av turneringen 🏁 — godt spilt!",
     cupProgress: "Cup-stigen",
     yourTurn: "DIN TUR",
@@ -365,7 +383,7 @@ export const no = {
     drawSub: "Godt spilt av begge.",
     invalidPin: "Fant ingen turnering med den PIN-en",
     tournamentAlreadyStarted: "Turneringen har allerede startet.",
-    tournamentFinishedBanner: "Turneringen er ferdig 🏆",
+    tournamentFinished: "Turneringen er ferdig 🏆",
     showMyCode: "Vis koden min",
     invalidCode: "Ugyldig kode",
     illegalMove: "Ulovlig trekk",

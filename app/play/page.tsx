@@ -7,6 +7,7 @@ import { api, ApiError, shouldClearSession } from "@/lib/client/api";
 import { identity, type StoredPlayer } from "@/lib/client/identity";
 import { errDetail, report } from "@/lib/client/telemetry";
 import { isValidPin } from "@/lib/codes";
+import { resumeTrouble } from "@/lib/client/resumeCopy";
 import { WaitingRoom } from "./WaitingRoom";
 
 type Screen =
@@ -18,20 +19,6 @@ type Screen =
   | "playing"
   /** Removed from a tournament that has already started — see attemptResume. */
   | "removed";
-
-/** Say WHY the resume failed, for the failures that keep the session. The
- * student can act on "no connection" but not on "noe gikk galt". */
-function resumeTrouble(e: unknown): string {
-  if (e instanceof ApiError) {
-    if (e.status === 0) {
-      return e.code === "timeout" ? no.player.resumeTimeout : no.player.resumeOffline;
-    }
-    if (e.status === 429) return no.player.resumeBusy;
-    // 5xx, or anything that wasn't our API talking (edge page / WAF / proxy).
-    if (e.status >= 500 || e.code === "non_json") return no.player.resumeServer;
-  }
-  return no.player.connection;
-}
 
 export default function Play() {
   const [screen, setScreen] = useState<Screen>("init");

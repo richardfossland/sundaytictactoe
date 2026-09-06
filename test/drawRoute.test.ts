@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Game, Player } from "@/lib/types";
 
-const { store, deferred } = vi.hoisted(() => ({
+const { store, deferred, rateLimitMock } = vi.hoisted(() => ({
   store: {
     getGame: vi.fn(),
     resolveGameRpc: vi.fn(),
@@ -9,6 +9,8 @@ const { store, deferred } = vi.hoisted(() => ({
   },
   // R8: broadcasts + scoring are handed to defer() and run after the response.
   deferred: [] as Array<() => Promise<void>>,
+  // H4: the per-IP gameact rate limiter, mocked so we can force a 429.
+  rateLimitMock: vi.fn().mockReturnValue(true),
 }));
 const authPlayer = vi.fn();
 const afterGameResolved = vi.fn();
@@ -27,6 +29,10 @@ vi.mock("@/lib/server/defer", () => ({
     deferred.push(task);
   },
 }));
+vi.mock("@/lib/server/http", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/server/http")>();
+  return { ...actual, rateLimit: (...a: unknown[]) => rateLimitMock(...a) };
+});
 
 async function drainDeferred(): Promise<void> {
   const queue = deferred.splice(0);
@@ -78,6 +84,7 @@ function req(body: unknown): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   deferred.length = 0;
+  rateLimitMock.mockReturnValue(true);
   store.resolveGameRpc.mockResolvedValue({ ok: true, status: "draw" });
   store.setDrawOffer.mockResolvedValue(undefined);
   afterGameResolved.mockResolvedValue(undefined);
@@ -93,6 +100,16 @@ describe("POST /api/game/draw", () => {
     const res = await POST(req({ gameId: GAME_ID, playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe("server_error");
+  });
+
+  // H4: bounds player-action bursts per IP; checked before auth even runs.
+  it("429s when the per-IP gameact bound is exceeded", async () => {
+    rateLimitMock.mockReturnValueOnce(false);
+    const res = await POST(req({ gameId: GAME_ID, playerId: "white", resumeCode: "AAAA-AA", action: "offer" }));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+    expect(authPlayer).not.toHaveBeenCalled();
+    expect(store.getGame).not.toHaveBeenCalled();
   });
 
   it("offer records the pending offer", async () => {
