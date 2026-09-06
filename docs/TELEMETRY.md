@@ -24,6 +24,11 @@ Hver hendelse er én rad i `tictactoe.client_events`:
 | `sid`           | tilfeldig token per sidelast — knytter hendelser fra samme fane sammen  |
 | `ua_class`      | bokstavelig talt strengen `mobile` eller `desktop`                       |
 
+`tournament_id` og `player_id` settes **bare** på hendelser som faktisk handler
+om en turneringsøkt, og bare når de kommer fra `/play`. En `js_error` er alltid
+anonym: den kan komme fra `/solo`, `/versus`, `/arranger` eller rot-layoutet, og
+skal ikke tilskrives en elev som tilfeldigvis har en lagret økt på enheten.
+
 `detail` er alltid flat og inneholder bare tall, boolske verdier og korte
 strenger (maks 200 tegn). Nøstede objekter og lister blir forkastet — både i
 nettleseren og på serveren — så det er ikke mulig å få med seg et helt
@@ -33,7 +38,7 @@ tilstandsobjekt ved et uhell.
 
 | `kind`          | Betyr                                                             |
 | --------------- | ------------------------------------------------------------------ |
-| `kick`          | økten ble slettet (`reason`: `resume`, `removed`, `logout`, `tournament_gone`) |
+| `kick`          | økten ble slettet (`reason`: `resume`, `removed`, `logout`, `switch_player`, `tournament_gone`) |
 | `watchdog`      | trekk-låsen overlevde tidsavbruddet og ble tvangsfrigjort         |
 | `channel_error` | sanntidskanalen falt ut (`CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED`) |
 | `api_timeout`   | tre bakgrunnssynkroniseringer på rad tidsavbrutt                  |

@@ -36,6 +36,11 @@ export default function Play() {
   // or any other HTML edge page (`non_json`), a WAF 403, network, rate-limit —
   // keeps the session and offers a retry: a blip must never kick a student back
   // to the join screen with "økten er utløpt".
+  //
+  // R6: `player()` is the session for the LAST tournament this device joined or
+  // resumed. Sessions for other tournaments stay on the device untouched, and
+  // every clear below names its own tournament — joining B must not silently
+  // throw away A's resume code.
   const attemptResume = useCallback(() => {
     const stored = identity.player();
     if (!stored) {
@@ -77,7 +82,7 @@ export default function Play() {
           // T5: the session is about to be wiped. Record WHY before the ids go
           // (report() reads them from the stored identity).
           report("kick", { reason: "resume", ...errDetail(e) });
-          identity.clearPlayer();
+          identity.clearPlayer(stored.tournamentId);
           setError(no.player.sessionExpired);
           setScreen("join");
           return;
@@ -194,7 +199,8 @@ export default function Play() {
             style={{ marginTop: 6 }}
             onClick={() => {
               report("kick", { reason: "removed" });
-              identity.clearPlayer();
+              // Only THIS tournament: a session for another one is still valid.
+              identity.clearPlayer(me?.tournamentId);
               setMe(null);
               setError(null);
               setPin("");
@@ -213,11 +219,12 @@ export default function Play() {
       <WaitingRoom
         me={me}
         onLeave={(reason) => {
-          // Deliberately its own reason: a student pressing "Logg ut" and a
-          // student whose tournament vanished under them are the same code path
-          // but very different numbers in the readout.
+          // Deliberately its own reason: a student pressing "Logg ut", a student
+          // handing the iPad to the next one ("Bytt spiller") and a student
+          // whose tournament vanished under them are the same code path but
+          // very different numbers in the readout.
           report("kick", { reason: reason ?? "logout" });
-          identity.clearPlayer();
+          identity.clearPlayer(me.tournamentId);
           setMe(null);
           setScreen("join");
         }}

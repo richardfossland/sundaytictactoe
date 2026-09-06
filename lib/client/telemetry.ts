@@ -41,6 +41,68 @@ export type TelemetryKind =
 const ENDPOINT = "/api/telemetry";
 const APP = "sundaytictactoe";
 
+/** Kinds that are ABOUT a student's tournament session, and may therefore carry
+ * the tournament/player ids.
+ *
+ * Everything else stays anonymous — notably `js_error`, which fires from every
+ * screen in the app (a crash in /solo, /arranger, /versus or the root layout goes
+ * through the same error boundary). Stamping the stored identity onto those was
+ * the R6 mis-attribution bug: the teacher's readout showed a student's ids on
+ * events that had nothing to do with that student's game, and a device that had
+ * ONCE joined a tournament kept attributing crashes to it forever. */
+const ATTRIBUTED_KINDS: ReadonlySet<TelemetryKind> = new Set<TelemetryKind>([
+  "kick",
+  "watchdog",
+  "channel_error",
+  "api_timeout",
+  "api_network",
+  "api_5xx",
+  "move_rollback",
+  "game_vanished",
+  "tab_passive",
+]);
+
+/** May an event of this kind carry the student's ids? */
+export function withIdentity(kind: TelemetryKind): boolean {
+  return ATTRIBUTED_KINDS.has(kind);
+}
+
+/** Is this page a tournament page? `/play` is the ONLY screen that acts on a
+ * stored student session; /solo, /versus and /arranger have identities of their own
+ * (or none at all) and must never borrow one. Belt-and-braces with the kind list
+ * above: a kind can only be attributed if BOTH agree. */
+function onTournamentPage(): boolean {
+  try {
+    const path = window.location?.pathname ?? "";
+    return path === "/play" || path.startsWith("/play/");
+  } catch {
+    return false;
+  }
+}
+
+/** The ids to stamp on this event, or nothing.
+ *
+ * `tournamentId` may be carried explicitly in the detail bag (lifted into its
+ * own column, exactly like `gameId`); otherwise it is derived from the session
+ * this page is playing. A carried id that has no stored session still names the
+ * tournament — the player half is simply omitted. */
+function attribution(
+  kind: TelemetryKind,
+  carriedTournamentId: unknown,
+): { tournamentId?: string; playerId?: string } {
+  if (!withIdentity(kind) || !onTournamentPage()) return {};
+  const me = isUuid(carriedTournamentId)
+    ? identity.playerFor(carriedTournamentId)
+    : identity.player();
+  const tid: unknown = me?.tournamentId ?? carriedTournamentId;
+  const pid: unknown = me?.playerId;
+  return {
+    // Opaque ids only, and only when they are genuinely UUIDs.
+    tournamentId: isUuid(tid) ? tid : undefined,
+    playerId: isUuid(pid) ? pid : undefined,
+  };
+}
+
 /** Per-tab ceiling. A pathological loop (a channel flapping, a render error
  * firing on every frame) must cost the network 30 beacons a minute, not 3000.
  * The server has its own per-IP limit; this one protects the student's phone. */
@@ -153,9 +215,12 @@ function allow(kind: string, detailKey: string, now: number): boolean {
 
 /** Report one client event. Fire-and-forget, never throws, no-op on the server.
  *
- * `detail.gameId` is lifted into the row's own `game_id` column when it is a
- * UUID (so the readout can group by game); everything else in `detail` stays a
- * flat bag of codes. */
+ * `detail.gameId` (and `detail.tournamentId`) are lifted into the row's own
+ * columns when they are UUIDs (so the readout can group by game); everything
+ * else in `detail` stays a flat bag of codes.
+ *
+ * The tournament/player ids are attached only when this is a tournament page
+ * AND the kind is one that is about a session — see `attribution()`. */
 export function report(
   kind: TelemetryKind,
   detail?: Record<string, unknown>,
@@ -169,22 +234,27 @@ export function report(
     let gameId: string | undefined;
     if (isUuid(rawGameId)) gameId = rawGameId;
     delete clamped.gameId;
+    // …and a tournament id, which a call site may name explicitly when the page
+    // is not the one whose session is stored last.
+    const rawTournamentId = clamped.tournamentId;
+    delete clamped.tournamentId;
 
+    // Both lifted ids are part of the dedupe key: they are exactly what
+    // distinguishes "the same failure, twice" from "the same failure in two
+    // different games / tournaments", and they are no longer in `detail`.
     const detailKey = JSON.stringify(clamped);
-    if (!allow(kind, `${detailKey}|${gameId ?? ""}`, Date.now())) return;
+    const named = typeof rawTournamentId === "string" ? rawTournamentId : "";
+    if (!allow(kind, `${detailKey}|${gameId ?? ""}|${named}`, Date.now())) return;
 
-    const me = identity.player();
-    const tid: unknown = me?.tournamentId;
-    const pid: unknown = me?.playerId;
+    const { tournamentId, playerId } = attribution(kind, rawTournamentId);
     const payload = {
       app: APP,
       kind,
       detail: clamped,
       sid: sessionId(),
       uaClass: uaClass(),
-      // Opaque ids only, and only when they are genuinely UUIDs.
-      tournamentId: isUuid(tid) ? tid : undefined,
-      playerId: isUuid(pid) ? pid : undefined,
+      tournamentId,
+      playerId,
       gameId,
     };
     const body = JSON.stringify(payload);

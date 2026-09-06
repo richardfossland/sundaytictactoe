@@ -99,7 +99,7 @@ export function WaitingRoom({
   me: StoredPlayer;
   /** `reason` (T5) only labels the telemetry event the parent records before it
    * wipes the session — the leave behaviour is identical either way. */
-  onLeave: (reason?: "logout" | "tournament_gone") => void;
+  onLeave: (reason?: "logout" | "tournament_gone" | "switch_player") => void;
 }) {
   const [showCode, setShowCode] = useState(false);
   const [rejoining, setRejoining] = useState(false);
@@ -220,7 +220,7 @@ export function WaitingRoom({
               // make every kick anonymous. onLeave clears the session itself;
               // the call below is the pre-existing belt-and-braces.
               onLeave("tournament_gone");
-              identity.clearPlayer();
+              identity.clearPlayer(me.tournamentId);
             }}
           >
             {no.player.logOut}
@@ -247,7 +247,7 @@ export function WaitingRoom({
             className="btn btn-ghost"
             onClick={() => {
               onLeave(); // first — see the tournament-gone button above
-              identity.clearPlayer();
+              identity.clearPlayer(me.tournamentId);
             }}
           >
             {no.player.logOut}
@@ -373,6 +373,23 @@ export function WaitingRoom({
           </span>
         )}
 
+        {/* Shared devices: the iPad that Ada used in round 1 is Bo's in round 2.
+            The name above is the question this button answers, so it sits right
+            under it — and it is the ordinary leave path, scoped to THIS
+            tournament, so a session for another tournament on the same device
+            survives. */}
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 13 }}
+          data-testid="switch-player"
+          onClick={() => {
+            onLeave("switch_player"); // first — see the tournament-gone button above
+            identity.clearPlayer(me.tournamentId);
+          }}
+        >
+          {no.player.switchPlayer}
+        </button>
+
         <div className="banner banner-wait" style={{ marginTop: 2, width: "100%" }}>
           {showWaitingSpinner && (
             <span
@@ -413,7 +430,7 @@ export function WaitingRoom({
           style={{ marginTop: 8 }}
           onClick={() => {
             onLeave(); // first — see the tournament-gone button above
-            identity.clearPlayer();
+            identity.clearPlayer(me.tournamentId);
           }}
         >
           {no.player.logOut}
