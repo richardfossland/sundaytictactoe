@@ -126,3 +126,4 @@ pattern:^chore\(deps(-dev)?\): bump
 #85   # chess lockfile audit-fix → TTT #39 (npm audit fix, same alerts)
 #88   # chess uptime cron re-register → TTT #41 (offset minutes)
 #76   # chess R9 PGN-off-poll — deliberately NOT ported (TTT boards are ≤25 chars)
+#90   # chess 60 s vitest testTimeout — chess engine specs are node-budgeted; TTT bot specs assert wall-clock (<300 ms) directly, so the bump would only hide hangs
