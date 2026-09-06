@@ -52,6 +52,12 @@ export function LeagueView({
   // draw), so it's confirmed via the themed dialog rather than window.confirm
   // (an OS popup a teacher can miss on a projector).
   const [confirmForce, setConfirmForce] = useState(false);
+  // Reinstating an absent/left player only takes effect from the NEXT round's
+  // pairing (the current round is already set) — confirmed the same way, so a
+  // stray tap on a projector can't silently change the roster.
+  const [reinstateTarget, setReinstateTarget] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -66,6 +72,13 @@ export function LeagueView({
   const teamRows = useMemo(
     () => computeTeamStandings(tournament.config.teams ?? [], players),
     [tournament.config.teams, players],
+  );
+  // Marked absent/left (a walkover with scope 'tournament', or a lobby ghost-
+  // kick that outlived the lobby) — collapsed out of the way, with the one
+  // button that undoes it from the next round.
+  const leftPlayers = useMemo(
+    () => players.filter((p) => p.status === "left"),
+    [players],
   );
   const teamById = useMemo(() => {
     const m = new Map(players.map((p) => [p.id, p.team]));
@@ -136,6 +149,20 @@ export function LeagueView({
     setError(null);
     try {
       await api.forceResolve(tournament.id, hostCode ?? "");
+      onChanged();
+    } catch {
+      setError(no.common.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reinstate(playerId: string) {
+    if (!hostCode) return setError(no.host.missingHostCode);
+    setBusy(true);
+    setError(null);
+    try {
+      await api.reinstate(tournament.id, hostCode, playerId);
       onChanged();
     } catch {
       setError(no.common.error);
@@ -261,6 +288,31 @@ export function LeagueView({
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Absent/left players — collapsed out of the way; "Ta inn igjen"
+              is the only way back in, and only takes effect next round. */}
+          {leftPlayers.length > 0 && (
+            <details className="stack" style={{ marginTop: 20 }}>
+              <summary className="eyebrow" style={{ cursor: "pointer" }}>
+                {no.host.outOfTournamentSection(leftPlayers.length)}
+              </summary>
+              <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+                {leftPlayers.map((p) => (
+                  <div className="spread" key={p.id} style={{ fontSize: 14 }}>
+                    <span className="muted">{p.displayName}</span>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ padding: "4px 10px", fontSize: 13, minHeight: 0 }}
+                      disabled={busy}
+                      onClick={() => setReinstateTarget({ id: p.id, name: p.displayName })}
+                    >
+                      {no.host.reinstate}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </section>
 
@@ -388,6 +440,19 @@ export function LeagueView({
           danger
           onConfirm={force}
           onCancel={() => setConfirmForce(false)}
+        />
+      )}
+
+      {reinstateTarget && (
+        <ConfirmDialog
+          message={no.host.reinstateConfirm(reinstateTarget.name)}
+          confirmLabel={no.host.reinstate}
+          onConfirm={() => {
+            const id = reinstateTarget.id;
+            setReinstateTarget(null);
+            reinstate(id);
+          }}
+          onCancel={() => setReinstateTarget(null)}
         />
       )}
     </main>

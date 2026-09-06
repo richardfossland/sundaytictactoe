@@ -1,4 +1,5 @@
-// Rounds guidance for the arranger wizard's "rounds" step.
+// Rounds guidance for the arranger wizard's "rounds" step, and (roundsWarning)
+// the host lobby's start card.
 //
 // Swiss/Monrad pairing (see lib/tournament/pair.ts) can only guarantee no
 // repeat pairing while there are enough distinct opponents to go around: once
@@ -6,8 +7,8 @@
 // other player once, so `greedyMatching` is forced into its "no rematch-free
 // matching exists" fallback and hands out a repeat pairing (see the
 // `rematch: true` branch there). We surface that ceiling here so the wizard
-// (and, later, the lobby — see the PR body) can warn the host before it
-// happens, instead of the host discovering it mid-tournament.
+// and the lobby can warn the host before it happens, instead of the host
+// discovering it mid-tournament.
 
 import { no } from "@/lib/locale/no";
 
@@ -42,9 +43,9 @@ export function recommendedRounds(players: number): number {
  * rematch for the given player count. Returns null when the roster can
  * support that many rounds without repeating a pairing.
  *
- * Not yet wired into the UI — the wizard runs before anyone has joined, so
- * it has no real player count to check against. The intended consumer is
- * the host lobby (where the actual roster is known), left for a follow-up PR.
+ * Wired into the host lobby's start card (LobbyView.tsx), the first place with
+ * a real player count — the wizard runs before anyone has joined, so it has no
+ * roster to check against yet.
  */
 export function roundsWarning(players: number, rounds: number): string | null {
   if (players <= 0) return null;
