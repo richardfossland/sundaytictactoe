@@ -74,7 +74,7 @@ describe("POST /api/lobby/kick", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(setPlayerStatus).toHaveBeenCalledWith(P_ID, "left");
-    expect(broadcast).toHaveBeenCalledWith(`lobby:${T_ID}`, "roster", { left: P_ID });
+    expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "roster", { left: P_ID });
   });
 
   // H2: getPlayer hands the id straight to Postgres. Before the guard this was

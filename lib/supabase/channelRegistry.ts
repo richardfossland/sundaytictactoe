@@ -35,7 +35,16 @@ interface Entry {
   teardown: boolean;
   /** Needed to recreate the channel in place (see recreateEntry below). */
   topic: string;
+  /** The presence key `entry.channel` was CREATED with (supabase-js fixes it at
+   * channel construction). Derived from the subs each time a channel is made —
+   * never frozen at first acquire, or a sub that arrives later with a key would
+   * advertise itself under the empty observer key of whoever got here first. */
   trackKey: string;
+  /** True between a SUBSCRIBED and the next failure/recreate. A sub that joins
+   * while this is set has already missed the SUBSCRIBED callback, so it must be
+   * track()ed on the spot rather than waiting for a resubscribe that may never
+   * come (M5). */
+  subscribed: boolean;
   /** Pending `recreateEntry` timer, or null when the channel is healthy / no
    * consumers remain to serve. */
   recreateTimer: ReturnType<typeof setTimeout> | null;
@@ -85,8 +94,24 @@ function scheduleRecreate(entry: Entry): void {
 function recreateEntry(entry: Entry): void {
   if (entry.subs.size === 0) return; // released while the backoff was pending
   destroyChannel(entry.channel);
+  // Re-derive the presence key from the CURRENT subs. The old code reused the
+  // key captured at first acquire, so a channel created by a broadcast-only
+  // observer stayed keyed "" forever — and every recreate re-tracked a student
+  // who had joined since under the observer key instead of their player id.
+  entry.trackKey = presenceKeyOf(entry);
+  entry.subscribed = false;
   entry.channel = createChannel(entry.topic, entry.trackKey);
   bindChannel(entry);
+}
+
+/** The presence key the channel for `entry` must be created with: the first sub
+ * that carries one, else "" (a pure observer). supabase-js fixes a channel's
+ * presence key at construction, so one topic can only advertise ONE key — which
+ * is exactly how this app uses it (a student tracks their own id; the host
+ * observes). */
+function presenceKeyOf(entry: Entry): string {
+  for (const s of entry.subs) if (s.trackKey) return s.trackKey;
+  return "";
 }
 
 /** Wire up broadcast/presence/status handling for `entry.channel`, fanning
@@ -125,8 +150,12 @@ function bindChannel(entry: Entry): void {
       // starts back at the shortest backoff step.
       cancelRecreate(entry);
       entry.backoffStep = 0;
+      entry.subscribed = true;
+      // Every sub that carries a key, not just the one that created the entry —
+      // so a recreate re-advertises presence for all of them.
       for (const s of entry.subs) if (s.trackKey) void channel.track({ online: true });
     } else if (status === "CLOSED" || status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      entry.subscribed = false;
       scheduleRecreate(entry);
     }
   });
@@ -194,9 +223,28 @@ export function acquireChannel(
   if (existing) {
     existing.teardown = false; // cancel any pending release
     existing.subs.add(sub);
+    // M5: presence for a LATE subscriber. The SUBSCRIBED callback is where
+    // track() lives, and this sub has already missed it — so the student who
+    // acquired an existing entry (a second consumer of the topic, or a
+    // trackKey change that released and re-acquired within the teardown
+    // microtask) never appeared online at all, and no poll heals presence.
+    if (sub.trackKey) {
+      if (existing.trackKey !== sub.trackKey) {
+        // The live channel was constructed with a DIFFERENT presence key (very
+        // often "", from an observer that got here first) and supabase-js will
+        // not let it change. track() on it would advertise the wrong key, so
+        // rebuild the channel around the right one; recreateEntry re-binds
+        // every sub and re-tracks at SUBSCRIBED.
+        cancelRecreate(existing);
+        recreateEntry(existing);
+      } else if (existing.subscribed) {
+        void existing.channel.track({ online: true });
+      }
+    }
     // A late joiner gets the current presence immediately (broadcasts are
     // transient — nothing to replay).
     if (sub.onPresence) sub.onPresence(presentKeys(existing.channel));
+    // `existing.channel` re-read, not captured above: a rebuild just swapped it.
     return { channel: existing.channel, release: () => releaseChannel(topic, sub) };
   }
 
@@ -207,6 +255,7 @@ export function acquireChannel(
     teardown: false,
     topic,
     trackKey,
+    subscribed: false,
     recreateTimer: null,
     backoffStep: 0,
   };

@@ -95,7 +95,7 @@ describe("POST /api/game/absent", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "black_win", scope: "tournament" });
     expect(setPlayerStatus).toHaveBeenCalledWith(WHITE, "left");
-    expect(broadcast).toHaveBeenCalledWith(`lobby:${T_ID}`, "tournament", {
+    expect(broadcast).toHaveBeenCalledWith(`ttt:lobby:${T_ID}`, "tournament", {
       playerLeft: WHITE,
     });
   });

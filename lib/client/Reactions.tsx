@@ -3,6 +3,13 @@
 // Ephemeral emoji reactions. Sent as client broadcasts on the game channel —
 // never stored, never authoritative. Gated by the tournament's `reactions`
 // config flag (default off) so the organizer decides if the room can handle it.
+//
+// These are the ONE payload with no server-side original to fall back on, so
+// every consumer must run an incoming reaction through `createReactionGate`
+// (lib/realtimeTrust.ts) before showing it: emoji from the list below, `by` a
+// player actually in this game, and at most 5 a second. Without that, anyone
+// who can read the public tournament payload can bury a live board under
+// floating emoji — or any string at all — from off-screen.
 
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 

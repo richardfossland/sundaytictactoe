@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BoardState } from "@/lib/dto";
 import type { GameStatus } from "@/lib/types";
 import { channels } from "@/lib/realtime";
+import {
+  isValidSpectatePosition,
+  isValidSpectateResult,
+} from "@/lib/realtimeTrust";
 import { useChannel } from "@/lib/client/useChannel";
 import { no } from "@/lib/locale/no";
 import { variantById } from "@/lib/ttt/variants";
@@ -12,6 +16,24 @@ import { MnkBoard } from "@/lib/client/MnkBoard";
 import { SpectateGame } from "./SpectateGame";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
 import { Confetti } from "@/lib/client/Confetti";
+
+/** The spectate feed is unauthenticated like every other topic (lib/realtimeTrust.ts):
+ * anyone holding the public anon key can send a `position` for any game id in
+ * the tournament. So a broadcast here is an OVERLAY on the authoritative board
+ * poll, never a merge into it — it fills the gap between two polls and stops
+ * counting the moment the poll reaches the same ply, or this long after it
+ * arrived, whichever comes first. Longer than a refetch round-trip so a real
+ * move never flickers back off the projector; short enough that a forged
+ * position is gone while the teacher is still looking at it. */
+const PATCH_TTL_MS = 4000;
+
+/** How long a burst of spectate broadcasts is coalesced into one board refetch.
+ * A round with fifteen boards emits a lot of these; without the window every
+ * move in the room would be its own GET. */
+const PATCH_REFETCH_MS = 1000;
+
+/** A board a broadcast claims for one game, pending the next board poll. */
+type Patch = { fen: string; ply: number; at: number };
 
 /** Column min-width for the responsive grid: fewer live games ⇒ bigger boards
  * so the projector stays readable as a round winds down. (1 game is special-
@@ -39,11 +61,18 @@ export function LiveGamesView({
     return (id: string | null) => (id ? (m.get(id) ?? "?") : no.host.bye);
   }, [players]);
 
-  // Freshest board per game: realtime spectate patches instantly, the 5 s board
-  // poll self-heals; merge by ply so we never show an older position.
-  const [fenMap, setFenMap] = useState<Record<string, string>>(() =>
-    Object.fromEntries(games.map((g) => [g.id, g.fen])),
-  );
+  const playerIds = useMemo(() => new Set(players.map((p) => p.id)), [players]);
+
+  // Broadcast overlay per game: realtime patches the projector instantly, the
+  // 5 s board poll is what it is checked against. Held SEPARATELY from `games`
+  // (rather than merged into a fenMap that then had to be un-merged) so the
+  // authoritative board is always one field away — a patch stops applying by
+  // itself the moment the poll catches up, and it can never wedge a board.
+  const [patch, setPatch] = useState<Record<string, Patch>>({});
+  const fenOf = (g: { id: string; fen: string }) => {
+    const p = patch[g.id];
+    return p && p.ply > plyOf(g.fen) ? p.fen : g.fen;
+  };
   const [openId, setOpenId] = useState<string | null>(null);
   // Games we've seen finish this session — drop them from the grid the instant
   // the result event arrives, without waiting for the next board poll.
@@ -53,19 +82,32 @@ export function LiveGamesView({
   // A brief "X vant!" flash over the grid when any game finishes in live mode.
   const [winFlash, setWinFlash] = useState<string | null>(null);
 
+  // Expire the overlay. One timer, armed for the oldest patch — when it fires,
+  // everything past its TTL is dropped and the authoritative board shows again.
+  // This is what bounds a forged position: no matter what ply it claimed, it is
+  // off the projector within PATCH_TTL_MS.
   useEffect(() => {
+    const ats = Object.values(patch).map((p) => p.at);
+    if (ats.length === 0) return;
+    const due = Math.max(0, PATCH_TTL_MS - (Date.now() - Math.min(...ats)));
+    const t = setTimeout(() => {
+      setPatch((prev) => {
+        const now = Date.now();
+        const next: Record<string, Patch> = {};
+        for (const [id, p] of Object.entries(prev)) {
+          if (now - p.at < PATCH_TTL_MS) next[id] = p;
+        }
+        // Same object when nothing expired — React bails out, and this effect
+        // (which depends on `patch`) doesn't re-arm in a loop.
+        return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+      });
+    }, due);
+    return () => clearTimeout(t);
+  }, [patch]);
+
+  useEffect(() => {
+    // Self-heal the "finished" veto: the authoritative poll wins.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFenMap((m) => {
-      const next = { ...m };
-      for (const g of games) {
-        if (!next[g.id] || plyOf(g.fen) >= plyOf(next[g.id])) next[g.id] = g.fen;
-      }
-      const liveIds = new Set(games.filter((g) => g.status === "live").map((g) => g.id));
-      for (const id of Object.keys(next)) {
-        if (!liveIds.has(id)) delete next[id];
-      }
-      return next;
-    });
     setFinished((s) => {
       if (s.size === 0) return s;
       const liveNow = new Set(games.filter((g) => g.status === "live").map((g) => g.id));
@@ -76,27 +118,55 @@ export function LiveGamesView({
     });
   }, [games]);
 
+  // Coalesced board refetch behind a spectate broadcast — the truth every patch
+  // below is waiting on.
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestBoard = useCallback(() => {
+    if (refetchTimer.current !== null) return;
+    refetchTimer.current = setTimeout(() => {
+      refetchTimer.current = null;
+      onStale?.();
+    }, PATCH_REFETCH_MS);
+  }, [onStale]);
+  useEffect(
+    () => () => {
+      if (refetchTimer.current !== null) clearTimeout(refetchTimer.current);
+    },
+    [],
+  );
+
+  // See lib/realtimeTrust.ts. The spectate topic is derivable from the public
+  // tournament payload and reachable with the public anon key, so nothing that
+  // arrives here is trusted: payloads are shape-checked, positions become an
+  // expiring overlay on the board poll rather than a merge into it, and a
+  // `result` only HIDES a board (a veto the poll already un-does, above) — the
+  // standings behind it always come from the refetch.
   useChannel(
     channels.spectate(tournament.id),
     (event, payload) => {
       if (event === "position") {
-        const p = payload as { gameId: string; fen: string };
-        setFenMap((m) =>
-          !m[p.gameId] || plyOf(p.fen) >= plyOf(m[p.gameId])
-            ? { ...m, [p.gameId]: p.fen }
-            : m,
-        );
+        if (!isValidSpectatePosition(payload, V.m * V.n)) return;
+        const p = payload;
+        setPatch((m) => ({
+          ...m,
+          [p.gameId]: { fen: p.fen, ply: plyOf(p.fen), at: Date.now() },
+        }));
+        requestBoard();
       } else if (event === "result") {
-        const p = payload as { gameId: string; status: GameStatus };
+        if (!isValidSpectateResult(payload)) return;
+        const p = payload;
         setFinished((s) => (s.has(p.gameId) ? s : new Set(s).add(p.gameId)));
         if (p.gameId === openId) setOpenResult(p.status);
+        // Celebrate the result over the grid (who won / draw) — but only for a
+        // game this projector is actually showing, so a made-up id can't put a
+        // "X vant!" banner over a round still in play.
         const g = games.find((x) => x.id === p.gameId);
         const flash =
           p.status === "white_win" && g
             ? `${nameById(g.whitePlayerId)} ${no.host.spectateWon}`
             : p.status === "black_win" && g
               ? `${nameById(g.blackPlayerId)} ${no.host.spectateWon}`
-              : p.status === "draw"
+              : p.status === "draw" && g
                 ? no.host.spectateDraw
                 : null;
         if (flash) setWinFlash(flash);
@@ -148,12 +218,13 @@ export function LiveGamesView({
       return (
         <SpectateGame
           gameId={g.id}
-          fen={fenMap[g.id] ?? g.fen}
+          fen={fenOf(g)}
           m={V.m}
           n={V.n}
           k={V.k}
           white={nameById(g.whitePlayerId)}
           black={nameById(g.blackPlayerId)}
+          senders={playerIds}
           result={openResult}
           onClose={() => {
             setOpenId(null);
@@ -186,7 +257,7 @@ export function LiveGamesView({
           {Heads(g)}
           <div className="stack" style={{ alignItems: "center" }}>
             <div style={{ width: "min(80vh, 640px)", maxWidth: "100%" }}>
-              <MnkBoard state={fenMap[g.id] ?? g.fen} m={V.m} n={V.n} size="lg" />
+              <MnkBoard state={fenOf(g)} m={V.m} n={V.n} size="lg" />
             </div>
           </div>
         </button>
@@ -233,7 +304,7 @@ export function LiveGamesView({
               style={{ padding: 12, cursor: "pointer", textAlign: "left", color: "inherit" }}
             >
               {Heads(g)}
-              <MnkBoard state={fenMap[g.id] ?? g.fen} m={V.m} n={V.n} size="sm" />
+              <MnkBoard state={fenOf(g)} m={V.m} n={V.n} size="sm" />
             </button>
           ))}
         </div>
