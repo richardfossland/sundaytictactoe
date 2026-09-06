@@ -1,6 +1,6 @@
 import { openTournamentByHostCode } from "@/lib/server/store";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
-import { normalizeResumeCode } from "@/lib/codes";
+import { isResumeCodeShape, normalizeResumeCode } from "@/lib/codes";
 
 // POST /api/tournament/open — reopen a tournament board with the host code.
 export async function POST(req: Request) {
@@ -19,6 +19,11 @@ async function handlePost(req: Request): Promise<Response> {
   const body = await readJson<{ hostCode?: string }>(req);
   const code = normalizeResumeCode(body?.hostCode?.toString() ?? "");
   if (!code) return fail(400, "missing_code");
+  // normalizeResumeCode PASSES THROUGH anything that isn't 6 characters, so
+  // without this the lookup below runs on arbitrary client input (a paste, a
+  // probe, a whole sentence). A code that cannot exist is a 400, decided here —
+  // before the database is touched at all.
+  if (!isResumeCodeShape(code)) return fail(400, "invalid_code");
 
   const t = await openTournamentByHostCode(code);
   if (!t) return fail(404, "not_found");

@@ -8,6 +8,7 @@ import { afterGameResolved } from "@/lib/server/gameEvents";
 import { broadcast } from "@/lib/server/broadcast";
 import { channels, events } from "@/lib/realtime";
 import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 import type { GameStatus } from "@/lib/types";
 
 // POST /api/game/absent — teacher marks a player "away from the board"; the
@@ -33,6 +34,8 @@ async function handlePost(req: Request): Promise<Response> {
     scope?: "round" | "tournament";
   }>(req);
   if (!body?.gameId || !body.absentPlayerId) return fail(400, "bad_request");
+  // A malformed gameId is a client error, not an outage (22P02 → false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
   const scope = body.scope === "tournament" ? "tournament" : "round";
 
   const game = await getGame(body.gameId);

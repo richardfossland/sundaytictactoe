@@ -33,9 +33,14 @@ async function drainDeferred(): Promise<void> {
 import { POST } from "@/app/api/lobby/rejoin/route";
 import { __resetRateLimiter } from "@/lib/server/http";
 
+// The route now shape-checks the body's tournamentId before comparing it, so
+// the fixture ids have to be real UUIDs.
+const T_ID = "22222222-2222-4222-8222-222222222222";
+const P_ID = "33333333-3333-4333-8333-333333333333";
+
 const player = (over: Partial<Player> = {}): Player => ({
-  id: "p1",
-  tournament_id: "t1",
+  id: P_ID,
+  tournament_id: T_ID,
   display_name: "Ada",
   resume_code: "AAAA-AA",
   score: 0,
@@ -48,7 +53,7 @@ const player = (over: Partial<Player> = {}): Player => ({
 
 const tournament = (status: TournamentStatus): Tournament =>
   ({
-    id: "t1",
+    id: T_ID,
     join_pin: "123456",
     host_code: "HOST-01",
     host_user_id: null,
@@ -67,7 +72,7 @@ function req(body: unknown): Request {
   });
 }
 
-const good = { tournamentId: "t1", playerId: "p1", resumeCode: "AAAA-AA" };
+const good = { tournamentId: T_ID, playerId: P_ID, resumeCode: "AAAA-AA" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,10 +119,12 @@ describe("POST /api/lobby/rejoin", () => {
     store.getTournament.mockResolvedValue(tournament("lobby"));
     const res = await POST(req(good));
     expect(res.status).toBe(200);
-    expect(store.setPlayerStatus).toHaveBeenCalledWith("p1", "active");
+    expect(store.setPlayerStatus).toHaveBeenCalledWith(P_ID, "active");
     expect(broadcast).not.toHaveBeenCalled();
     await drainDeferred();
-    expect(broadcast).toHaveBeenCalledWith("lobby:t1", "roster", { joined: "p1" });
+    expect(broadcast).toHaveBeenCalledWith(`lobby:${T_ID}`, "roster", {
+      joined: P_ID,
+    });
   });
 
   it("returns a structured 503 (never throws) when an internal call fails", async () => {

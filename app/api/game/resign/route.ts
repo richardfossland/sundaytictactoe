@@ -3,6 +3,7 @@ import { authPlayer } from "@/lib/server/auth";
 import { afterGameResolved } from "@/lib/server/gameEvents";
 import { defer } from "@/lib/server/defer";
 import { fail, ok, readJson } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 import type { GameStatus } from "@/lib/types";
 
 // POST /api/game/resign — the resigning player loses; opponent wins.
@@ -22,6 +23,8 @@ async function handlePost(req: Request): Promise<Response> {
     resumeCode?: string;
   }>(req);
   if (!body?.gameId) return fail(400, "bad_request");
+  // A malformed gameId is a client error, not an outage (22P02 → false 503).
+  if (!isUuid(body.gameId)) return fail(400, "bad_request");
 
   const player = await authPlayer(body.playerId, body.resumeCode);
   if (!player) return fail(401, "unauthorized");

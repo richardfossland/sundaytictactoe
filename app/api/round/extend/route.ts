@@ -9,6 +9,15 @@ import { fail, ok, readJson, hostRateLimit } from "@/lib/server/http";
 // minutes, and started_at — which is also the chess clocks' t0 — stays fixed
 // so extensions never erase time the players already used.
 export async function POST(req: Request) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error("[round/extend]", err);
+    return fail(503, "server_error");
+  }
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const limited = hostRateLimit(req);
   if (limited) return limited;
   const body = await readJson<{ tournamentId?: string; hostCode?: string }>(req);

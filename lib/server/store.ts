@@ -336,7 +336,11 @@ export async function setPlayerSeed(
   seed: number,
 ): Promise<void> {
   const db = createServiceClient();
-  await db.from("players").update({ seed }).eq("id", playerId);
+  // M3: a swallowed write error makes the ROUTE report success for work that
+  // did not happen. Throw instead — every caller is inside a try/catch that
+  // answers 503, which is the truth: the write failed, retry.
+  const { error } = await db.from("players").update({ seed }).eq("id", playerId);
+  if (error) throw error;
 }
 
 export async function setPlayerStatus(
@@ -344,7 +348,8 @@ export async function setPlayerStatus(
   status: Player["status"],
 ): Promise<void> {
   const db = createServiceClient();
-  await db.from("players").update({ status }).eq("id", playerId);
+  const { error } = await db.from("players").update({ status }).eq("id", playerId);
+  if (error) throw error;
 }
 
 // ---------------- rounds / games (used from Phase 2/3) ----------------
@@ -397,7 +402,8 @@ export async function setRoundStatus(
   status: Round["status"],
 ): Promise<void> {
   const db = createServiceClient();
-  await db.from("rounds").update({ status }).eq("id", roundId);
+  const { error } = await db.from("rounds").update({ status }).eq("id", roundId);
+  if (error) throw error;
 }
 
 export async function setRoundStartedAt(
@@ -405,7 +411,11 @@ export async function setRoundStartedAt(
   startedAt: string,
 ): Promise<void> {
   const db = createServiceClient();
-  await db.from("rounds").update({ started_at: startedAt }).eq("id", roundId);
+  const { error } = await db
+    .from("rounds")
+    .update({ started_at: startedAt })
+    .eq("id", roundId);
+  if (error) throw error;
 }
 
 /** Atomically add 60s to a round's timer extension (RPC from 0007).
@@ -547,12 +557,19 @@ export async function setDrawOffer(
   byPlayerId: string | null,
 ): Promise<void> {
   const db = createServiceClient();
-  await db.from("games").update({ draw_offered_by: byPlayerId }).eq("id", gameId);
+  const { error } = await db
+    .from("games")
+    .update({ draw_offered_by: byPlayerId })
+    .eq("id", gameId);
+  if (error) throw error;
 }
 
 export async function recomputeScores(tournamentId: string): Promise<void> {
   const db = createServiceClient();
-  await db.rpc("recompute_scores", { p_tournament_id: tournamentId });
+  const { error } = await db.rpc("recompute_scores", {
+    p_tournament_id: tournamentId,
+  });
+  if (error) throw error;
 }
 
 export async function listGames(tournamentId: string): Promise<Game[]> {
@@ -616,16 +633,21 @@ export async function scorePredictions(
   const actual = map[status];
   if (!actual) return; // aborted/bye → predictions stay void
   const db = createServiceClient();
-  await db
+  // Callers reach this through afterGameResolved, which already swallows the
+  // rejection (the predictions table is optional) — but a real failure now
+  // shows up in the log instead of silently marking nothing.
+  const wrong = await db
     .from("predictions")
     .update({ correct: false })
     .eq("game_id", gameId)
     .neq("predicted", actual);
-  await db
+  if (wrong.error) throw wrong.error;
+  const right = await db
     .from("predictions")
     .update({ correct: true })
     .eq("game_id", gameId)
     .eq("predicted", actual);
+  if (right.error) throw right.error;
 }
 
 /** Points per player (1 per correct prediction). Empty if unmigrated. */
@@ -666,24 +688,6 @@ export async function listPredictionsForPlayer(
       r.predicted,
     ]),
   );
-}
-
-/** The current live (or most recent) game for a player, for resume/waiting. */
-export async function currentGameForPlayer(
-  tournamentId: string,
-  playerId: string,
-): Promise<Game | null> {
-  const db = createServiceClient();
-  const { data, error } = await db
-    .from("games")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .or(`white_player_id.eq.${playerId},black_player_id.eq.${playerId}`)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as Game) ?? null;
 }
 
 // ---------------- client telemetry (migration 0012, T5, port of sundaychess#87) ----------------

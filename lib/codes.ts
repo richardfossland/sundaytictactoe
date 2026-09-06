@@ -40,6 +40,19 @@ export function normalizeResumeCode(input: string): string {
   return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
 }
 
+// The shape generateResumeCode/generateHostCode produce: 4 letters, dash, 2
+// alphanumerics. normalizeResumeCode PASSES ANYTHING THAT ISN'T 6 characters
+// THROUGH unchanged (uppercased+trimmed), so a caller that hands its output
+// straight to a `.eq("host_code", …)` lookup queries on arbitrary client input.
+// Check the shape first and answer 400 — a code that cannot exist is a client
+// error, not a database round-trip.
+const RESUME_CODE_RE = /^[A-Z]{4}-[A-Z0-9]{2}$/;
+
+/** Is `code` (already normalised) a well-formed resume/host code? */
+export function isResumeCodeShape(code: unknown): code is string {
+  return typeof code === "string" && RESUME_CODE_RE.test(code);
+}
+
 const PIN_RE = /^\d{6}$/;
 export function isValidPin(input: string): boolean {
   return PIN_RE.test(input.trim());

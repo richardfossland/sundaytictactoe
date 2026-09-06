@@ -4,6 +4,7 @@ import { broadcast } from "@/lib/server/broadcast";
 import { defer } from "@/lib/server/defer";
 import { channels, events } from "@/lib/realtime";
 import { fail, ok, readJson, rateLimit, clientIp } from "@/lib/server/http";
+import { isUuid } from "@/lib/codes";
 
 // POST /api/lobby/rejoin — a student who was removed from the LOBBY puts
 // themselves back in. The counterpart to /api/lobby/kick, and the reason the
@@ -36,6 +37,10 @@ async function handlePost(req: Request): Promise<Response> {
     resumeCode?: string;
   }>(req);
   if (!body?.tournamentId || !body.playerId) return fail(400, "bad_request");
+  // Malformed ids are client errors, not outages: authPlayer shape-checks the
+  // playerId itself, but the tournamentId is compared below and would otherwise
+  // read as a 403 "forbidden" — say what it actually is.
+  if (!isUuid(body.tournamentId)) return fail(400, "bad_request");
 
   // The (playerId, resumeCode) bearer pair — a student may only re-add THEMSELF.
   const player = await authPlayer(body.playerId, body.resumeCode);
