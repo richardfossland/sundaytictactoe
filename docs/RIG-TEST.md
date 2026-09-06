@@ -13,7 +13,8 @@ SundayChess; see `docs/PORTING.md` for how the port works and why `docs/**`
 is deliberately excluded from it, which is why this file needed a manual
 pass rather than an automatic one). There is no `ROBUSTNESS-BACKLOG.md` in
 this repo — it was deleted on purpose when the repo was cloned; findings and
-their fixes live in the PR history (`git log --oneline`) instead.
+their fixes live in the PR history (`git log --oneline`) instead. §1b is new
+as of 2026-09-06, for runde 2 (`docs/STABILITY-PROGRAM-2026-09.md`).
 
 ## 0. What the rig no longer needs to prove
 
@@ -97,6 +98,89 @@ behaves differently from a developer laptop.
   on the arranger's live-grid view, confirm boards update without visible
   flicker or reflow across variants (the grid's boards are memoized so an
   unrelated game's move can't re-render the whole grid).
+
+## 1b. Runde 2 scenarios (2026-09-06)
+
+New manual scenarios from the second stability pass — three audits, ported
+from chess plus TTT's own product/solo work (`docs/STABILITY-PROGRAM-2026-09.md`
+§"Runde 2"). Same rule as §1: these need real devices/eyes, not vitest.
+
+### Phone / backgrounded tab
+
+- [ ] **"DIN TUR" i bakgrunn.** Background the tab (switch app, or lock the
+  phone screen without ending the session) while it's your turn, and let the
+  opponent move. Foreground again: the tab title should have alternated
+  "DIN TUR" ↔ the normal title, and — only if you'd already tapped 🔔 to opt
+  in — a notification and a short vibration should have fired once. Confirm
+  nothing fires without that opt-in tap (no auto-permission prompt, ever).
+
+### Arranger / projector
+
+- [ ] **Vertskode skjult, "Vis vertskode" reveals it.** Open the lobby on the
+  projector: the host code must not be visible by default. Tap "Vis
+  vertskode" — a chip with the code and a "Kopier" button appears, and
+  auto-hides again after ~20 s.
+- [ ] **Maskerte elevkoder.** Open the codes list: every resume code renders
+  masked by default; tapping a row reveals only that row's code.
+- [ ] **Cup-runde tid ute → "Avslutt runden".** In a playoff/cup round, let
+  the round timer expire while at least one game is still live. Confirm the
+  ⏰ banner and an "Avslutt runden" button appear, as a themed confirm
+  dialog, not a browser `confirm()` popup.
+- [ ] **Hurtigstart.** From the arranger, press "⚡ Rask start" and confirm a
+  league (5 rounds, no playoff) is created immediately with an
+  auto-generated "Turnering DD.MM" title. Separately, step through "Tilpass
+  turnering …" and confirm single-select steps auto-advance ~150 ms after a
+  tap, with "Neste" hidden on those steps, and that the rounds step is a
+  labelled ± stepper (not a slider) with a "Tommelfingerregel" hint.
+- [ ] **Utskrift av resultater.** On the finished screen, press "Skriv ut /
+  lagre som PDF". Confirm the print preview shows the full standings table
+  in black-on-white with toolbars/toggles/confetti hidden, and that any
+  walkover/absent/override game shows its fair-play marker instead of
+  looking like a normal result.
+
+### Player / waiting room
+
+- [ ] **Venterom viser "Runde n av N · x partier igjen".** With a round live
+  and at least one other game still in progress, confirm a waiting/finished
+  player's screen shows that exact progress line, falling back to "Venter på
+  at arrangøren starter runde n+1" once every game in the round has
+  resolved.
+- [ ] **Oppgavekortet i venterommet.** As a waiting, bye'd, or already-
+  eliminated player (lobby, bye round, gap between rounds, or knocked out of
+  a cup), confirm the waiting room shows a "🧩 Tre på rad mens du venter"
+  puzzle card instead of just a spinner — solve one, confirm "Riktig! ✓" and
+  the solved counter increments; get one wrong, confirm "Ikke helt – prøv en
+  gang til ✗" and the position is unchanged. Confirm the puzzle card never
+  appears once your own game goes live.
+
+### Draw offer / dialogs
+
+- [ ] **Tilbud om uavgjort: Escape lukker uten å avslå.** Offer a draw from
+  one board; on the other board, press Escape (or click the backdrop).
+  Confirm the dialog closes but the offer is still pending (not declined) —
+  a "Svar på tilbudet om uavgjort" ghost button should appear to reopen it.
+  Confirm the explicit "Avslå" button still actually declines.
+- [ ] **Tastatur i dialoger (fokusfelle / Escape).** Open any dialog built on
+  the shared `Modal` (`ConfirmDialog`, the draw-offer dialog, `CodesModal`,
+  `DiagnosticsModal`, `OverrideModal`, the result overlay). Tab repeatedly
+  and confirm focus cycles only within the dialog; confirm Escape closes it
+  and focus returns to whatever opened it.
+- [ ] **Reduced-motion (ingen konfetti).** Enable "reduce motion" at the OS
+  level. Reload and win a game (arranger, solo, or local versus). Confirm no
+  confetti animation plays while the win banner/text still appears.
+
+### Solo (`/solo`)
+
+- [ ] **«Uslåelig» på 3×3 = uavgjort er best.** Play 3×3 against the top bot
+  level ("Uslåelig", not "Umulig" — renamed #48) and confirm the setup
+  screen's note says perfect play is a draw at best; confirm you cannot
+  actually win against it (a draw is the best achievable result).
+- [ ] **Adaptiv solo «Nivå ≈ …».** Open `/solo` and confirm "Tilpasset" is
+  the default difficulty (not a fixed rung), with a "Nivå ≈ N" chip shown in
+  setup and again on the result card. Win a few games in a row and confirm
+  the displayed level rises; lose a few and confirm it falls. Undo a
+  *finished* game and replay it to a different result — confirm the rating
+  does not move twice for the same game.
 
 ## 2. Wire up the `tictactoe` schema on the shared Supabase project
 
