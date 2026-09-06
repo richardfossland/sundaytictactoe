@@ -1,11 +1,22 @@
 # The wider browser run, once a night.
 #
-# Every PR pays for `desktop-chromium` only — the teacher's laptop, the layout
-# most changes touch. `mobile-chromium` (390×844, touch, the borrowed phone) is
-# just as load-bearing for this app but roughly doubles the suite's wall time, so
-# it runs here instead of on the critical path of every push.
+# Every PR pays for `desktop-chromium` under `next start` only — the teacher's
+# laptop, the layout most changes touch. Three things are just as load-bearing
+# for this app and none of them belong on the critical path of every push:
 #
-# A red nightly is a real regression on a device the PR gate does not cover:
+#   * `mobile-chromium` (390×844, touch, the borrowed phone);
+#   * `mobile-webkit` — the SAME viewport on the engine iPhone Safari actually
+#     runs. Chromium at 390 px proves the layout; it does not prove the engine,
+#     and the classroom's second device is an iPhone more often than not;
+#   * the OpenNext Worker itself. Everything above runs under `next start`,
+#     which is not what we deploy: `after()` → `ctx.waitUntil` (lib/server/defer.ts),
+#     the `staticAssetsIncrementalCache` interception, and `nodejs_compat` under
+#     the pinned compatibility date all exist ONLY inside workerd.
+#
+# Both jobs call the same reusable workflow, so a Supabase service name or an
+# env mapping cannot drift between them or against the PR gate.
+#
+# A red nightly is a real regression on something the PR gate does not cover:
 # open it, do not rerun-until-green.
 name: nightly
 
@@ -18,7 +29,26 @@ on:
 concurrency: nightly-e2e
 
 jobs:
+  # Three browser projects, one `next start`. One Supabase boot and one build
+  # serve all three, which is why WebKit is a project here rather than a job of
+  # its own.
   e2e:
     uses: ./.github/workflows/e2e.yml
     with:
-      projects: desktop-chromium mobile-chromium
+      projects: desktop-chromium mobile-chromium mobile-webkit
+      # Three projects at ~5 min each on top of the boot and the build; 20 was
+      # sized for one.
+      timeout: 40
+
+  # The shipped runtime. `desktop-chromium` only: the point of this lane is the
+  # SERVER, and running the same specs on a second browser against it would buy
+  # nothing the job above does not already cover.
+  e2e-worker:
+    uses: ./.github/workflows/e2e.yml
+    with:
+      projects: desktop-chromium
+      server: worker
+      # `opennextjs-cloudflare build` is a full `next build` plus the bundling
+      # pass plus the cache-population copy, and it happens inside Playwright's
+      # `webServer` (see playwright.config.ts) before a single test runs.
+      timeout: 40

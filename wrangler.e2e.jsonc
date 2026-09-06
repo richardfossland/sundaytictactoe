@@ -1,0 +1,54 @@
+{
+  // ⚠️ TEST CONFIG. `wrangler dev` ONLY — never `wrangler deploy`.
+  //
+  // The e2e "worker lane" runs the suite against the thing we actually ship:
+  // the OpenNext bundle, executed by workerd. `npm run e2e:server:worker`
+  // builds it and starts `wrangler dev` with this file (see docs/E2E.md).
+  //
+  // It is a copy of wrangler.jsonc with exactly three deliberate differences —
+  // each of which is also the reason it must never reach production:
+  //
+  //  1. NO `routes`. The deployed config claims the custom domain
+  //     tictactoe.sundaysuite.app. A dev server has no business owning that
+  //     name, and `wrangler deploy -c wrangler.e2e.jsonc` would otherwise fight
+  //     the real Worker for it.
+  //  2. NO `global_fetch_strictly_public`. That flag makes every subrequest go
+  //     out over the public internet, so the Worker could not reach the local
+  //     Supabase the suite boots on 127.0.0.1:54321 — the requests would be
+  //     refused, and every server route would fail. Production keeps the flag:
+  //     it is what stops a Worker from being used to probe private addresses.
+  //  3. `observability` OFF. A dev server's logs go to the terminal; there is
+  //     no account to bill or dashboard to fill.
+  //
+  // Everything the runtime SEMANTICS depend on is unchanged on purpose —
+  // `compatibility_date` and `nodejs_compat` are exactly the deployed values,
+  // because a lane that ran under a different compat date would be testing a
+  // runtime nobody ships.
+  //
+  // The name differs too (`-e2e` suffix): a stray `wrangler deploy` with this
+  // file creates a separate, unrouted Worker rather than overwriting the live
+  // one.
+  //
+  // ⚠️ E2E_SEAM: the lane passes `--var E2E_SEAM:1` on the COMMAND LINE, never
+  // from this file. The seam (`POST /api/dev/quickmatch`, unauthenticated
+  // tournament/player/game minting) must not be reachable through anything that
+  // is committed — see docs/E2E.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sundaytictactoe-e2e",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": false
+  }
+  // Runtime env for the lane comes from `.dev.vars` (gitignored; written by the
+  // CI job from `supabase status -o env`, written by hand locally):
+  //   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  //   SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_BASE_URL
+  // The NEXT_PUBLIC_* pair is ALSO needed at build time (Next inlines it into
+  // the client bundle); .dev.vars covers the server half.
+}

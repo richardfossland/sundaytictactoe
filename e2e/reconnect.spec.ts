@@ -25,6 +25,37 @@ import { BoardPage } from "./pages/board";
 /** Both of these wait on shipped timeouts rather than on the app being quick. */
 test.describe.configure({ mode: "serial" });
 
+// ⚠️ NOT RUN ON WEBKIT — and the reason is the harness, not the app.
+//
+// `context.setOffline(true)` is emulation, and the engines emulate different
+// amounts of "offline". Measured against a local WebSocket server that pushes a
+// frame every 300 ms, with `setOffline(true)` called at t=0:
+//
+//   chromium   navigator.onLine=false   frames after 2 s: 0   fetch: fails
+//   webkit     navigator.onLine=false   frames after 2 s: 7   fetch: fails
+//
+// Chromium's CDP `Network.emulateNetworkConditions` severs sockets that are
+// already open. WebKit's `Network.setEmulateOfflineState` blocks new HTTP loads
+// and flips `navigator.onLine`, but leaves an ESTABLISHED WebSocket delivering.
+//
+// This app's live updates arrive on exactly such a socket (Supabase Realtime,
+// opened when the board mounts), so on WebKit the opponent's move still lands on
+// a device the test believes is offline — `✕ saw a move it could not have
+// received`. The premise these two specs are built on cannot be established
+// there at all.
+//
+// Skipped rather than softened: a real iPhone that loses its network has the OS
+// tear the socket down, so the behaviour under test (the poll backstop, the
+// reconnecting badge, the pending rollback — all engine-independent React and
+// fetch logic) is faithfully covered on Chromium. Weakening the assertions to
+// accommodate an emulation gap would cost the coverage everywhere to buy nothing
+// anywhere. `lobby-rejoin.spec.ts` uses `setOffline` too and DOES run on WebKit:
+// it closes the page immediately afterwards, which severs the socket for real.
+test.skip(
+  ({ browserName }) => browserName === "webkit",
+  "context.setOffline does not close an already-open WebSocket in WebKit; these specs need the network to actually be gone",
+);
+
 test("the network drops, the board stays, and it catches up by itself", async ({
   browser,
   request,

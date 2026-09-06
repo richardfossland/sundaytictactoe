@@ -41,6 +41,12 @@ yarn-error.log*
 .env*
 # ...but DO commit the documented template (no secrets in it).
 !.env.example
+# wrangler's local secret files — NOT matched by `.env*`, and they hold the
+# service-role key. The e2e worker lane writes this one (docs/E2E.md): CI fills
+# it from `supabase status -o env`, locally you write it by hand. Glob, not the
+# bare name: wrangler also reads `.dev.vars.<environment>`.
+.dev.vars
+.dev.vars.*
 
 # vercel
 .vercel
