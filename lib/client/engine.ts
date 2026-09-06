@@ -8,7 +8,7 @@
 // Ported from the chess app's lib/client/engine.ts — same demotion and timeout
 // rules, so the two apps fail the same way.
 
-import { chooseMove, type BotLevel } from "@/lib/ttt/bot";
+import { chooseMove, type BotLevel, type BotParams } from "@/lib/ttt/bot";
 import { isErrorResponse, type BotResponse } from "@/lib/ttt/botProtocol";
 import type { MnkVariant } from "@/lib/ttt/variants";
 
@@ -54,9 +54,12 @@ export function requestBotMove(
   state: string,
   variant: MnkVariant,
   level: BotLevel,
+  /** Adaptive knobs; when given they replace `level` on both sides of the
+   * worker boundary. Plain data, so structured clone carries them fine. */
+  params?: BotParams,
 ): Promise<number | null> {
   const w = getWorker();
-  if (!w) return Promise.resolve(chooseMove(state, variant, level));
+  if (!w) return Promise.resolve(chooseMove(state, variant, level, Math.random, params));
 
   return new Promise((resolve) => {
     const id = ++seq;
@@ -73,16 +76,16 @@ export function requestBotMove(
       // Ignore replies to earlier requests — a superseded search that finishes
       // late must not answer the question we are asking now.
       if (!d || d.id !== id) return;
-      if (isErrorResponse(d)) finish(chooseMove(state, variant, level));
+      if (isErrorResponse(d)) finish(chooseMove(state, variant, level, Math.random, params));
       else finish(d.move ?? null);
     };
     // If the worker dies or never replies, demote it (so the NEXT move skips it
     // instead of waiting another 5s) and compute on the main thread now.
     const timer = setTimeout(() => {
       worker = null;
-      finish(chooseMove(state, variant, level));
+      finish(chooseMove(state, variant, level, Math.random, params));
     }, WORKER_TIMEOUT_MS);
     w.addEventListener("message", onMsg);
-    w.postMessage({ id, state, variantId: variant.id, level });
+    w.postMessage({ id, state, variantId: variant.id, level, params });
   });
 }
