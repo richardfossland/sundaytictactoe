@@ -6,6 +6,14 @@ on:
     branches: [main]
   pull_request:
 
+# One run per ref at a time. A stacked branch push cancels its own superseded
+# run (nightly/uptime already do this); `main` never cancels one push's e2e run
+# because another push landed mid-flight — a red `main` run must finish so it is
+# visible, not vanish under `cancel-in-progress`.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
