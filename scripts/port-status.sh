@@ -15,6 +15,10 @@
 #     Each NN is mapped to the chess squash-merge commit via
 #     `git log --grep "(#NN)"` against the chess remote (chess merges PRs
 #     with GitHub's default squash subject "<subject> (#NN)").
+#   - the same, in the squash-merge-title shape GitHub gives a combined
+#     port PR: "(port of chess #103/#104/#107)" or "(port of chess #96)",
+#     case-insensitive, "chess" or "sundaychess", numbers separated by
+#     "/", "," or " and ". Checked on both the subject and the body.
 #   - a `Port: TTT #<NN>` line in the CHESS-side commit's own body — the
 #     mirror convention documented in sundaychess's docs/PORTING.md, for a
 #     port that landed here without repeating the chess PR number.
