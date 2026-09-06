@@ -124,21 +124,39 @@ port::is_ignored() {
 }
 
 # port::extract_port_pr_refs <commit-bodies-on-stdin>
-# Print every PR number referenced by a `Port of sundaychess#<NN>` mention,
-# one per line — including every number in a combined mention such as
-# "Port of sundaychess#66 and #70", "...#71 (the rig) and
-# sundaychess#74 (the CI job)", or "...#64 (ef046d6) + #68". Only a line
-# that literally contains "Port of sundaychess#" is considered; on that
-# line, only the part from "sundaychess" onward is scanned, cut at the
-# line's first ". " (sentence end) if there is one, so prose that follows
-# the port mention on the same line can't leak an unrelated "#NN" in.
+# Print every PR number referenced by a port mention, one per line, in
+# either of two shapes (both scanned on every line — subject or body):
+#
+#   1. `Port of sundaychess#<NN>` (case-sensitive, the original
+#      convention) — including every number in a combined mention such as
+#      "Port of sundaychess#66 and #70", "...#71 (the rig) and
+#      sundaychess#74 (the CI job)", or "...#64 (ef046d6) + #68". Only a
+#      line that literally contains "Port of sundaychess#" is considered;
+#      on that line, only the part from "sundaychess" onward is scanned,
+#      cut at the line's first ". " (sentence end) if there is one, so
+#      prose that follows the port mention on the same line can't leak an
+#      unrelated "#NN" in.
+#   2. `(port of chess #NN/#MM/#KK)`-style squash-merge titles (case-
+#      insensitive, "chess" or "sundaychess", numbers separated by "/",
+#      "," or " and ", the trailing "#" on each optional) — e.g. "(port of
+#      chess #103/#104/#107)", "(port of chess #96)". Matched with a tight
+#      regex anchored at "port of (sunday)?chess" rather than the
+#      permissive "cut at sentence end" trick above, so a trailing GitHub
+#      squash PR number such as the "(#57)" that follows the closing
+#      paren is never swept in.
 port::extract_port_pr_refs() {
-  local line after
+  local line after match
   while IFS= read -r line; do
-    [[ "$line" == *"Port of sundaychess#"* ]] || continue
-    after="${line#*sundaychess}"
-    after="${after%%. *}"
-    grep -Eo '#[0-9]+' <<< "$after" | tr -d '#' || true
+    if [[ "$line" == *"Port of sundaychess#"* ]]; then
+      after="${line#*sundaychess}"
+      after="${after%%. *}"
+      grep -Eo '#[0-9]+' <<< "$after" | tr -d '#' || true
+      continue
+    fi
+    match="$(grep -Eio 'port of (sundaychess|chess)([[:space:]]*#[0-9]+|[[:space:]]*[/,][[:space:]]*#?[0-9]+|[[:space:]]+and[[:space:]]+#?[0-9]+)+' <<< "$line" || true)"
+    if [[ -n "$match" ]]; then
+      grep -Eo '[0-9]+' <<< "$match" || true
+    fi
   done
 }
 

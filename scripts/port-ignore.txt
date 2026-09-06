@@ -69,6 +69,50 @@ e1556da73ca38578e98497234902efe5bbe9c9bc  chess #46 -> TTT #2
 # (.github/dependabot.yml).
 882142a9c1bdda982debe07330cdddb0a69f0ae3  chess #50 -> TTT #7
 
+# --- chess #37-#41 ("Deploy 1"-"Deploy A", all 2026-06-16) predate TTT's
+# own clone (`chore: initialize git repository`, 2026-06-17) by a day, so
+# their functionality is already baked into that first commit rather than
+# landing as a separate port. Verified file-by-file: every non-excluded
+# file each commit touches already exists, byte-for-byte descended from
+# the same clone, as of TTT's init commit (`git log --diff-filter=A` on
+# each shows `chore: initialize git repository` as the adding commit) -----
+
+# chess #37 "feat(playoff): teacher resolves a knockout draw" -> already in
+# TTT's init commit: lib/server/playoff.ts, app/api/round/advance/route.ts,
+# lib/client/api.ts, test/playoff.test.ts.
+92747a1ce689ea8f47d5820849f912769cf18180  chess #37 -> TTT init commit
+
+# chess #38 '"out of tournament" message + no layout jump on moves' ->
+# already in TTT's init commit: app/play/GameView.tsx,
+# app/play/WaitingRoom.tsx (out-of-tournament copy + layout fix present).
+93ac7e97db8088d2ecc6a8d92e440e11b811ee0b  chess #38 -> TTT init commit
+
+# chess #39 "stable live-grid order + fullscreen toggle" -> already in
+# TTT's init commit: lib/client/FullscreenToggle.tsx.
+9373382042fd648a40223853fd558bfb25ce4833  chess #39 -> TTT init commit
+
+# chess #40 "one active tab per player + lighter polling" -> already in
+# TTT's init commit: lib/client/useActiveTab.ts, test/activeTab.test.ts.
+80640c30509197174ada1f1082fb441fb7259ccf  chess #40 -> TTT init commit
+
+# chess #41 "shared cup bracket — visible to players + finished recap" ->
+# already in TTT's init commit: lib/client/BracketBoard.tsx.
+792a5d0bd979a8e33a6dd7c8fd096958a0deff64  chess #41 -> TTT init commit
+
+# chess #100 "18 verified lessons from piece moves to mate-in-one" is
+# chess-coach content: app/solo/Lessons.tsx and lib/coach/lessons.ts are
+# both already-excluded paths (lib/coach/**, app/solo/**); the only
+# non-excluded file is test/lessons.test.ts, which exercises the excluded
+# lib/coach/lessons.ts module and has no TTT equivalent to test (no m,n,k
+# lesson curriculum) — same class as test/coach.test.ts already excluded.
+8fd01f908293000a2944fbe65e2e58bfbda67825  chess #100 -> chess-only coach content, nothing to port
+
+# chess #106 "eslint 9 -> 10" -> TTT #54, same day, identical file set
+# (eslint.config.mjs, package-lock.json, package.json) — sourced from the
+# sundayquiz pilot recipe independently, not a literal port of #106 (same
+# class as chess #85/#88 above: each repo's dependency state is its own).
+319a66a8721e05624edf552119722ace0b998d0c  chess #106 -> TTT #54
+
 # --- dependency bumps: dependabot runs independently in this repo too, so
 # a chess-side dependency bump never has anything for TTT to port. Scoped
 # to dependabot's own commit-subject convention ("bump ..."), not the
