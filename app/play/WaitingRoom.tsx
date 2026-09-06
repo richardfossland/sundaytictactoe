@@ -301,7 +301,7 @@ export function WaitingRoom({
   const eliminated = state ? isOut(state, me.playerId) : false;
   let banner: string = no.player.waitingStart;
   if (status !== "lobby") {
-    if (status === "finished") banner = "Turneringen er ferdig 🏆";
+    if (status === "finished") banner = no.player.tournamentFinishedBanner;
     else if (eliminated) banner = no.player.outOfTournament;
     else if (game?.status === "bye") banner = no.player.waitingBye;
     else banner = no.player.waitingNext;
@@ -354,7 +354,7 @@ export function WaitingRoom({
           <div className="big-code">{me.resumeCode}</div>
         ) : (
           <button className="btn btn-ghost" onClick={() => setShowCode(true)}>
-            Vis koden min
+            {no.player.showMyCode}
           </button>
         )}
         <p className="muted" style={{ fontSize: 12 }}>

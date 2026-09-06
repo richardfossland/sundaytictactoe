@@ -34,6 +34,11 @@ const WIN = 1_000_000;
  * play); larger boards are bounded so the bot stays snappy. */
 function maxDepth(level: BotLevel, v: MnkVariant): number {
   const size = v.m * v.n;
+  // "easy" never actually reaches this function today — chooseMove short-circuits
+  // it into the deliberately-weak random/immediate-only branch above — but it
+  // gets an honest (shallow) answer here rather than silently falling through
+  // to "impossible"'s depth, in case that ever changes.
+  if (level === "easy") return 1;
   if (level === "medium") return 2;
   if (level === "hard") return size <= 9 ? 9 : size <= 16 ? 4 : 3;
   // impossible

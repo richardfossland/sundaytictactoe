@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { no } from "@/lib/locale/no";
 
 /** Small fixed-corner button to enter/exit fullscreen — for a distraction-free
  * projector or play view. Uses the Fullscreen API on the document root; the
@@ -29,8 +30,8 @@ export function FullscreenToggle() {
   return (
     <button
       className="fullscreen-toggle"
-      aria-label={isFull ? "Avslutt fullskjerm" : "Fullskjerm"}
-      title={isFull ? "Avslutt fullskjerm" : "Fullskjerm"}
+      aria-label={isFull ? no.common.fullscreenExit : no.common.fullscreenEnter}
+      title={isFull ? no.common.fullscreenExit : no.common.fullscreenEnter}
       onClick={toggle}
     >
       {isFull ? "🡼" : "⛶"}

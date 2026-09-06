@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Playfair_Display, Hanken_Grotesk } from "next/font/google";
+import { no } from "@/lib/locale/no";
 import "./globals.css";
 
 // Suite brand fonts.
@@ -15,9 +16,8 @@ const body = Hanken_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "SundayTicTacToe — bondesjakk-turnering for hele gruppa",
-  description:
-    "Bondesjakk-turnering på storskjerm med liga, sluttspill og lag. Arrangøren styrer tavla, spillerne blir med med en PIN.",
+  title: no.metaTitle,
+  description: no.metaDescription,
 };
 
 export default function RootLayout({

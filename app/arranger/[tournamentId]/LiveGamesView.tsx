@@ -213,7 +213,7 @@ export function LiveGamesView({
           </div>
         ) : (
           <p className="muted text-center" style={{ padding: 40 }}>
-            Ingen partier pågår akkurat nå.
+            {no.host.noLiveGames}
           </p>
         )
       ) : (

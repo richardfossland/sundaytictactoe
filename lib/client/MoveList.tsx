@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
+import { no } from "@/lib/locale/no";
 
 /** Half-move list from a TTT pgn (space-separated cell indices → ["4","0",…]).
  * [] on empty/bad input. */
@@ -32,7 +33,7 @@ export function MoveList({ sans, title }: { sans: string[]; title?: string }) {
       className="movelist"
       data-testid="movelist"
       role="log"
-      aria-label={title ?? "Trekkliste"}
+      aria-label={title ?? no.common.moveListLabel}
       ref={containerRef}
     >
       {sans.length === 0 ? (
