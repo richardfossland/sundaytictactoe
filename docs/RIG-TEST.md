@@ -184,7 +184,7 @@ from chess plus TTT's own product/solo work (`docs/STABILITY-PROGRAM-2026-09.md`
 
 ## 2. Wire up the `tictactoe` schema on the shared Supabase project
 
-Unlike some other Sunday Suite apps, SundayTicTacToe does **not** get its own
+Unlike some other SundaySuite apps, SundayTicTacToe does **not** get its own
 Supabase project — it lives in a dedicated `tictactoe` schema on the **shared**
 Sunday Supabase project (the same project SundayChess and others live on).
 Locally, `supabase/config.toml` already exposes `tictactoe` for
