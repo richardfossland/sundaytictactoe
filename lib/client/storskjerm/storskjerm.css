@@ -68,19 +68,22 @@
 }
 /* Luft mot overscan på TV/projektor (16:9-trygg ramme) og større skrift på
  * store skjermer. `zoom` skalerer hele tavla likt, også px-baserte størrelser. */
+/* min-height deles på zoom-faktoren, ellers blir siden høyere enn skjermen. */
 .presentasjon {
+  --sz: 1;
   padding: 2vh 2.5vw;
-  min-height: 100dvh;
+  min-height: calc(100dvh / var(--sz));
   box-sizing: border-box;
+  zoom: var(--sz);
 }
 @media (min-width: 1280px) {
   .presentasjon {
-    zoom: 1.1;
+    --sz: 1.1;
   }
 }
 @media (min-width: 1800px) {
   .presentasjon {
-    zoom: 1.3;
+    --sz: 1.3;
   }
 }
 /* Hjørneknapper er for hånden, ikke for publikum: nesten usynlige til hover. */
