@@ -15,6 +15,7 @@ import { plyOf } from "@/lib/ttt/ply";
 import { MnkBoard } from "@/lib/client/MnkBoard";
 import { SpectateGame } from "./SpectateGame";
 import { FullscreenToggle } from "@/lib/client/FullscreenToggle";
+import { usePresentasjon } from "@/lib/client/storskjerm/usePresentasjon";
 import { Confetti } from "@/lib/client/Confetti";
 
 /** The spectate feed is unauthenticated like every other topic (lib/realtimeTrust.ts):
@@ -69,6 +70,7 @@ export function LiveGamesView({
   onExitLive?: () => void;
 }) {
   const { tournament, players, games, rounds } = state;
+  const presentasjon = usePresentasjon();
   const V = variantById(tournament.config.variant);
   const nameById = useMemo(() => {
     const m = new Map(players.map((p) => [p.id, p.displayName]));
@@ -292,7 +294,8 @@ export function LiveGamesView({
   return (
     <main className="wrap" style={{ padding: "12px 24px 64px", maxWidth: "min(96vw, 1800px)" }}>
       {live.length === 0 ? (
-        roundOver && onExitLive ? (
+        // Tavlevisning: ingen "tilbake til arrangering"-kort (vertskontroll).
+        roundOver && onExitLive && !presentasjon ? (
           <div className="result-overlay">
             <Confetti count={120} />
             <div className="result-card stack" style={{ alignItems: "center", gap: 14 }}>
