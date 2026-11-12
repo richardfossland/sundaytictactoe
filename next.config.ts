@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  // Load-bearing, see docs/DECISIONS.md ADR-001: `typescript` is the TS 6 compat
+  // package (no `bin.tsc`), so Next must type-check via the in-process API.
+  experimental: {
+    useTypeScriptCli: false,
+  },
 };
 
 export default nextConfig;
